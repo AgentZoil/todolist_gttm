@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Role {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  users User[]
+
+  @@map("roles")
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users            User[]
+  ownedTasks       Task[]                @relation("TaskOwner")
+  coordinatingTasks TaskCoordinatingDepartment[]
+
+  @@map("departments")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  authUserId     String   @unique @map("auth_user_id")
+  fullName       String   @map("full_name")
+  roleId         String   @map("role_id")
+  departmentId   String   @map("department_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  department Department @relation(fields: [departmentId], references: [id])
+
+  createdTasks Task[]          @relation("TaskCreator")
+  updatedTasks Task[]          @relation("TaskUpdater")
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Task {
+  id                       String   @id @default(uuid())
+  taskCode                 String   @unique @map("task_code")
+  content                  String
+  source                   String   @map("source")
+  assignedDate             DateTime @map("assigned_date")
+  assignedBy               String   @map("assigned_by")
+  documentNumber           String?  @map("document_number")
+  ownerDepartmentId        String   @map("owner_department_id")
+  requiredCompletionDate   DateTime? @map("required_completion_date")
+  actualCompletionDate     DateTime? @map("actual_completion_date")
+  completionEvidence       String?  @map("completion_evidence")
+  isCancelled              Boolean  @default(false) @map("is_cancelled")
+  cancelledAt              DateTime? @map("cancelled_at")
+  cancelledBy              String?  @map("cancelled_by")
+  isFinalized              Boolean  @default(false) @map("is_finalized")
+  finalizedAt              DateTime? @map("finalized_at")
+  finalizedBy              String?  @map("finalized_by")
+  version                  Int      @default(1)
+  createdBy                String   @map("created_by")
+  updatedBy                String?  @map("updated_by")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  ownerDepartment     Department                 @relation("TaskOwner", fields: [ownerDepartmentId], references: [id])
+  creator             User                       @relation("TaskCreator", fields: [createdBy], references: [id])
+  updater             User?                      @relation("TaskUpdater", fields: [updatedBy], references: [id])
+  coordinatingDepts   TaskCoordinatingDepartment[]
+  auditLogs           AuditLog[]
+
+  @@index([ownerDepartmentId])
+  @@index([requiredCompletionDate])
+  @@index([actualCompletionDate])
+  @@index([isCancelled])
+  @@index([isFinalized])
+  @@index([createdAt])
+  @@index([ownerDepartmentId, requiredCompletionDate])
+  @@map("tasks")
+}
+
+model TaskCoordinatingDepartment {
+  taskId       String     @map("task_id")
+  departmentId String     @map("department_id")
+
+  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, departmentId])
+  @@map("task_coordinating_departments")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  fieldName  String?  @map("field_name")
+  oldValue   String?  @map("old_value")
+  newValue   String?  @map("new_value")
+  ipAddress  String?  @map("ip_address")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+  task Task? @relation(fields: [entityId], references: [id])
+
+  @@index([userId])
+  @@index([entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model PeriodLock {
+  id        String   @id @default(uuid())
+  year      Int
+  month     Int
+  lockedAt  DateTime @map("locked_at")
+  lockedBy  String   @map("locked_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([year, month])
+  @@map("period_locks")
+}
