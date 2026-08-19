@@ -1,9 +1,26 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { DepartmentsModule } from './departments/departments.module';
+import { TasksModule } from './tasks/tasks.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
+import { PeriodLockModule } from './period-lock/period-lock.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
-  imports: [],
+  imports: [
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    DepartmentsModule,
+    TasksModule,
+    AuditLogModule,
+    PeriodLockModule,
+    DashboardModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

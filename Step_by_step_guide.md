@@ -19,6 +19,7 @@ Nếu coding agent đã bắt đầu code theo bản lộ trình trước, đố
 
 ## Cách dùng tài liệu này với coding agent
 
+- Đọc `docs/design-system.md` trước khi bắt đầu Giai đoạn 3 (Frontend).
 - Giao **từng bước một**, không giao cả giai đoạn cùng lúc — agent dễ lạc hướng và khó review diff khi phạm vi quá rộng.
 - Sau mỗi bước: yêu cầu agent chạy thử (build/start/test), bạn review, rồi mới `git commit` trước khi sang bước kế tiếp.
 - Với các bước có đánh dấu 🧪, luôn yêu cầu agent viết kèm test (unit hoặc curl/e2e script) trong cùng bước — đừng để dồn lại cuối.
@@ -83,9 +84,11 @@ Nếu coding agent đã bắt đầu code theo bản lộ trình trước, đố
 
 ## Giai đoạn 3 — Frontend skeleton
 
+> **LƯU Ý**: Đọc `docs/design-system.md` trước khi bắt đầu giai đoạn này. Toàn bộ giao diện phải tuân thủ design system "Corporate Trust" đã được định nghĩa ở đó.
+
 **3.1** `create-next-app apps/web` (TypeScript, Tailwind, App Router).
 
-**3.2** Cài `shadcn/ui`, khởi tạo theme mặc định (chưa cần tùy biến sâu).
+**3.2** Cài `shadcn/ui`, cấu hình theme theo `docs/design-system.md` (Plus Jakarta Sans, Indigo/Violet palette, colored shadows).
 
 **3.3** Cài `@supabase/supabase-js` + `@supabase/ssr`, tạo Supabase client cho frontend (anon key).
 

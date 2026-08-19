@@ -36,3 +36,6 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+
+# Memory & State
+memory-state.md
