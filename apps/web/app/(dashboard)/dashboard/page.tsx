@@ -140,7 +140,6 @@ export default function DashboardPage() {
                   <tr key={dept.departmentId} className="border-t border-border hover:bg-muted/50">
                     <td className="p-3">
                       <div className="font-medium">{dept.departmentName}</div>
-                      <div className="text-xs text-muted-foreground">{dept.departmentCode}</div>
                     </td>
                     <td className="p-3 text-center">{dept.total}</td>
                     <td className="p-3 text-center text-green-600">{dept.completed}</td>

@@ -55,9 +55,6 @@ export default function DepartmentsPage() {
                 STT
               </th>
               <th className="text-left p-3 font-medium text-muted-foreground">
-                Mã phòng
-              </th>
-              <th className="text-left p-3 font-medium text-muted-foreground">
                 Tên phòng ban
               </th>
               <th className="text-left p-3 font-medium text-muted-foreground">
@@ -72,7 +69,6 @@ export default function DepartmentsPage() {
                 className="border-t border-border hover:bg-muted/50"
               >
                 <td className="p-3">{index + 1}</td>
-                <td className="p-3 font-mono text-xs">{dept.code}</td>
                 <td className="p-3">{dept.name}</td>
                 <td className="p-3">
                   <span

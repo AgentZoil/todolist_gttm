@@ -161,7 +161,7 @@ export default function UsersPage() {
                 <option value="">Chọn phòng ban</option>
                 {departments.map((dept) => (
                   <option key={dept.id} value={dept.id}>
-                    {dept.code} - {dept.name}
+                    {dept.name}
                   </option>
                 ))}
               </select>
