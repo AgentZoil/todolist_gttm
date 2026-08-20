@@ -79,11 +79,13 @@ export class TasksService {
         select: {
           id: true,
           taskCode: true,
+          title: true,
           content: true,
           source: true,
           assignedDate: true,
           assignedBy: true,
           documentNumber: true,
+          coordinatingUnits: true,
           requiredCompletionDate: true,
           actualCompletionDate: true,
           isCancelled: true,
@@ -121,15 +123,13 @@ export class TasksService {
       select: {
         id: true,
         taskCode: true,
+        title: true,
         content: true,
         source: true,
-        assignedDate: true,
-        assignedBy: true,
-        documentNumber: true,
-        ownerDepartmentId: true,
         requiredCompletionDate: true,
         actualCompletionDate: true,
         completionEvidence: true,
+        coordinatingUnits: true,
         isCancelled: true,
         cancelledAt: true,
         cancelledBy: true,
@@ -161,42 +161,37 @@ export class TasksService {
   }
 
   async create(data: {
+    title: string;
     content: string;
     source: string;
     assignedDate: string;
     assignedBy: string;
     documentNumber?: string;
+    coordinatingUnits?: string;
     ownerDepartmentId: string;
     requiredCompletionDate?: string;
     createdBy: string;
-    coordinatingDepartmentIds?: string[];
   }) {
     const taskCode = `NV-${Date.now()}`;
 
     return this.prisma.task.create({
       data: {
         taskCode,
+        title: data.title,
         content: data.content,
         source: data.source,
         assignedDate: new Date(data.assignedDate),
         assignedBy: data.assignedBy,
         documentNumber: data.documentNumber,
+        coordinatingUnits: data.coordinatingUnits,
         ownerDepartmentId: data.ownerDepartmentId,
         requiredCompletionDate: data.requiredCompletionDate
           ? new Date(data.requiredCompletionDate)
           : null,
         createdBy: data.createdBy,
-        coordinatingDepts: data.coordinatingDepartmentIds
-          ? {
-              create: data.coordinatingDepartmentIds.map((deptId) => ({
-                departmentId: deptId,
-              })),
-            }
-          : undefined,
       },
       include: {
         ownerDepartment: true,
-        coordinatingDepts: { include: { department: true } },
       },
     });
   }

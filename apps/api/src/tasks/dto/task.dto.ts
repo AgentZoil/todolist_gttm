@@ -4,6 +4,11 @@ export class CreateTaskDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(500)
+  title: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
   content: string;
 
   @IsString()
@@ -21,9 +26,14 @@ export class CreateTaskDto {
   assignedBy: string;
 
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   @MaxLength(50)
-  documentNumber?: string;
+  documentNumber: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  coordinatingUnits?: string;
 
   @IsUUID()
   @IsNotEmpty()
@@ -32,15 +42,17 @@ export class CreateTaskDto {
   @IsDateString()
   @IsOptional()
   requiredCompletionDate?: string;
-
-  @IsOptional()
-  coordinatingDepartmentIds?: string[];
 }
 
 export class UpdateTaskDto {
   @IsString()
   @IsOptional()
   @MaxLength(500)
+  title?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
   content?: string;
 
   @IsString()
@@ -65,6 +77,11 @@ export class UpdateTaskDto {
   @IsUUID()
   @IsOptional()
   ownerDepartmentId?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  coordinatingUnits?: string;
 
   @IsDateString()
   @IsOptional()

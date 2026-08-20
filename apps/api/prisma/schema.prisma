@@ -39,13 +39,13 @@ model User {
   authUserId     String   @unique @map("auth_user_id")
   fullName       String   @map("full_name")
   roleId         String   @map("role_id")
-  departmentId   String   @map("department_id")
+  departmentId   String?  @map("department_id")
   isActive       Boolean  @default(true) @map("is_active")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   role       Role       @relation(fields: [roleId], references: [id])
-  department Department @relation(fields: [departmentId], references: [id])
+  department Department? @relation(fields: [departmentId], references: [id])
 
   createdTasks Task[]          @relation("TaskCreator")
   updatedTasks Task[]          @relation("TaskUpdater")
@@ -57,11 +57,13 @@ model User {
 model Task {
   id                       String   @id @default(uuid())
   taskCode                 String   @unique @map("task_code")
+  title                    String
   content                  String
   source                   String   @map("source")
   assignedDate             DateTime @map("assigned_date")
   assignedBy               String   @map("assigned_by")
   documentNumber           String?  @map("document_number")
+  coordinatingUnits        String?  @map("coordinating_units")
   ownerDepartmentId        String   @map("owner_department_id")
   requiredCompletionDate   DateTime? @map("required_completion_date")
   actualCompletionDate     DateTime? @map("actual_completion_date")
