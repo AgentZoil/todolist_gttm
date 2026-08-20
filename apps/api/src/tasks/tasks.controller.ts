@@ -42,10 +42,13 @@ export class TasksController {
   @Post()
   async create(
     @Body() body: CreateTaskDto,
-    @CurrentUser() user: { id: string },
+    @CurrentUser() user: { id: string; role: string; departmentId: string },
   ) {
     const task = await this.tasksService.create({
       ...body,
+      ownerDepartmentId: ['ADMIN', 'SECRETARY'].includes(user.role)
+        ? body.ownerDepartmentId
+        : user.departmentId,
       createdBy: user.id,
     });
     return { data: task };
