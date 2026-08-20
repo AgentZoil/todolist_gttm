@@ -76,10 +76,26 @@ export class TasksService {
     const [tasks, total] = await Promise.all([
       this.prisma.task.findMany({
         where,
-        include: {
-          ownerDepartment: true,
-          creator: { select: { id: true, fullName: true } },
-          coordinatingDepts: { include: { department: true } },
+        select: {
+          id: true,
+          taskCode: true,
+          content: true,
+          source: true,
+          assignedDate: true,
+          assignedBy: true,
+          documentNumber: true,
+          requiredCompletionDate: true,
+          actualCompletionDate: true,
+          isCancelled: true,
+          isFinalized: true,
+          version: true,
+          createdAt: true,
+          ownerDepartment: {
+            select: { id: true, code: true, name: true },
+          },
+          creator: {
+            select: { id: true, fullName: true },
+          },
         },
         orderBy: { [sortBy]: sortOrder },
         skip: (page - 1) * limit,
@@ -102,11 +118,43 @@ export class TasksService {
   async findOne(id: string) {
     const task = await this.prisma.task.findUnique({
       where: { id },
-      include: {
-        ownerDepartment: true,
-        creator: { select: { id: true, fullName: true } },
-        updater: { select: { id: true, fullName: true } },
-        coordinatingDepts: { include: { department: true } },
+      select: {
+        id: true,
+        taskCode: true,
+        content: true,
+        source: true,
+        assignedDate: true,
+        assignedBy: true,
+        documentNumber: true,
+        ownerDepartmentId: true,
+        requiredCompletionDate: true,
+        actualCompletionDate: true,
+        completionEvidence: true,
+        isCancelled: true,
+        cancelledAt: true,
+        cancelledBy: true,
+        isFinalized: true,
+        finalizedAt: true,
+        finalizedBy: true,
+        version: true,
+        createdBy: true,
+        updatedBy: true,
+        createdAt: true,
+        updatedAt: true,
+        ownerDepartment: {
+          select: { id: true, code: true, name: true },
+        },
+        creator: {
+          select: { id: true, fullName: true },
+        },
+        updater: {
+          select: { id: true, fullName: true },
+        },
+        coordinatingDepts: {
+          select: {
+            department: { select: { id: true, code: true, name: true } },
+          },
+        },
       },
     });
     return task ? this.enrichTask(task) : null;
