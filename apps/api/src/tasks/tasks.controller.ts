@@ -61,14 +61,17 @@ export class TasksController {
     },
     @CurrentUser() user: { id: string; role: string; departmentId: string },
   ) {
-    const canEdit = await this.tasksService.canEditTask(id, user);
-    if (!canEdit) {
-      throw new ForbiddenException('Bạn không có quyền sửa nhiệm vụ này');
+    if (!['ADMIN', 'SECRETARY'].includes(user.role)) {
+      const canEdit = await this.tasksService.findOne(id);
+      if (canEdit && canEdit.ownerDepartmentId !== user.departmentId) {
+        throw new ForbiddenException('Bạn không có quyền sửa nhiệm vụ này');
+      }
     }
 
     const task = await this.tasksService.update(id, {
       ...body,
       updatedBy: user.id,
+      userRole: user.role,
     });
     return { data: task };
   }
@@ -80,6 +83,25 @@ export class TasksController {
     @CurrentUser() user: { id: string },
   ) {
     const task = await this.tasksService.cancel(id, user.id);
+    return { data: task };
+  }
+
+  @Patch(':id/finalize')
+  async finalize(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    const task = await this.tasksService.finalize(id, user.id, user.role);
+    return { data: task };
+  }
+
+  @Patch(':id/unfinalize')
+  @Roles('ADMIN')
+  async unfinalize(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    const task = await this.tasksService.unfinalize(id, user.id);
     return { data: task };
   }
 }
