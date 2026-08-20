@@ -74,4 +74,9 @@ Open `http://localhost:3000`
 | 1 — Backend skeleton | Done |
 | 2 — Auth skeleton | Done |
 | 3 — Frontend skeleton | Done |
-| 4–13 | Pending |
+| 4 — Vertical slice | Done |
+| 5 — Users & Departments | Done |
+| 6 — Task CRUD | Done |
+| 7 — Status Calculation | Done |
+| 8 — Audit Log | Done |
+| 9–13 | Pending |
