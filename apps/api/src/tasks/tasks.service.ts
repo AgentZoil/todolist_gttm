@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { Injectable, ForbiddenException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PeriodLockService } from '../period-lock/period-lock.service';
@@ -33,17 +33,70 @@ export class TasksService {
     };
   }
 
-  async findAll(departmentId?: string) {
-    const tasks = await this.prisma.task.findMany({
-      where: departmentId ? { ownerDepartmentId: departmentId } : undefined,
-      include: {
-        ownerDepartment: true,
-        creator: { select: { id: true, fullName: true } },
-        coordinatingDepts: { include: { department: true } },
+  async findAll(params: {
+    departmentId?: string;
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  } = {}) {
+    const {
+      departmentId,
+      page = 1,
+      limit = 20,
+      search,
+      status,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = params;
+
+    const where: any = {};
+    if (departmentId) where.ownerDepartmentId = departmentId;
+    if (search) {
+      where.OR = [
+        { content: { contains: search, mode: 'insensitive' } },
+        { taskCode: { contains: search, mode: 'insensitive' } },
+        { source: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (status) {
+      if (status === 'IN_PROGRESS') {
+        where.isCancelled = false;
+        where.actualCompletionDate = null;
+      } else if (status === 'COMPLETED') {
+        where.isCancelled = false;
+        where.actualCompletionDate = { not: null };
+      } else if (status === 'CANCELLED') {
+        where.isCancelled = true;
+      }
+    }
+
+    const [tasks, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        include: {
+          ownerDepartment: true,
+          creator: { select: { id: true, fullName: true } },
+          coordinatingDepts: { include: { department: true } },
+        },
+        orderBy: { [sortBy]: sortOrder },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
+
+    return {
+      data: tasks.map((task) => this.enrichTask(task)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
-      orderBy: { createdAt: 'desc' },
-    });
-    return tasks.map((task) => this.enrichTask(task));
+    };
   }
 
   async findOne(id: string) {
@@ -146,6 +199,7 @@ export class TasksService {
       requiredCompletionDate?: string;
       actualCompletionDate?: string;
       completionEvidence?: string;
+      expectedVersion?: number;
       updatedBy: string;
       userRole: string;
     },
@@ -153,9 +207,15 @@ export class TasksService {
     const oldTask = await this.prisma.task.findUnique({ where: { id } });
     if (!oldTask) throw new ForbiddenException('Task not found');
 
+    if (data.expectedVersion !== undefined && data.expectedVersion !== oldTask.version) {
+      throw new ConflictException(
+        'Nhiệm vụ đã bị thay đổi bởi người khác. Vui lòng tải lại trang.',
+      );
+    }
+
     await this.checkEditPermissions(oldTask, data, data.userRole);
 
-    const { userRole, ...updateData } = data;
+    const { userRole, expectedVersion, ...updateData } = data;
 
     const updatedTask = await this.prisma.task.update({
       where: { id },
@@ -170,6 +230,7 @@ export class TasksService {
         actualCompletionDate: updateData.actualCompletionDate
           ? new Date(updateData.actualCompletionDate)
           : undefined,
+        version: { increment: 1 },
       },
       include: {
         ownerDepartment: true,

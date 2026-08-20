@@ -4,6 +4,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { CreateTaskDto, UpdateTaskDto } from './dto/task.dto';
 
 @Controller('tasks')
 @UseGuards(AuthGuard, RolesGuard)
@@ -11,9 +12,25 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Get()
-  async findAll(@Query('departmentId') departmentId: string) {
-    const tasks = await this.tasksService.findAll(departmentId);
-    return { data: tasks };
+  async findAll(
+    @Query('departmentId') departmentId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+  ) {
+    const result = await this.tasksService.findAll({
+      departmentId,
+      page: page ? parseInt(page, 10) : 1,
+      limit: limit ? parseInt(limit, 10) : 20,
+      search,
+      status,
+      sortBy,
+      sortOrder,
+    });
+    return result;
   }
 
   @Get(':id')
@@ -24,17 +41,7 @@ export class TasksController {
 
   @Post()
   async create(
-    @Body()
-    body: {
-      content: string;
-      source: string;
-      assignedDate: string;
-      assignedBy: string;
-      documentNumber?: string;
-      ownerDepartmentId: string;
-      requiredCompletionDate?: string;
-      coordinatingDepartmentIds?: string[];
-    },
+    @Body() body: CreateTaskDto,
     @CurrentUser() user: { id: string },
   ) {
     const task = await this.tasksService.create({
@@ -47,18 +54,7 @@ export class TasksController {
   @Patch(':id')
   async update(
     @Param('id') id: string,
-    @Body()
-    body: {
-      content?: string;
-      source?: string;
-      assignedDate?: string;
-      assignedBy?: string;
-      documentNumber?: string;
-      ownerDepartmentId?: string;
-      requiredCompletionDate?: string;
-      actualCompletionDate?: string;
-      completionEvidence?: string;
-    },
+    @Body() body: UpdateTaskDto,
     @CurrentUser() user: { id: string; role: string; departmentId: string },
   ) {
     if (!['ADMIN', 'SECRETARY'].includes(user.role)) {

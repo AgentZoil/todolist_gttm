@@ -21,6 +21,7 @@ interface Task {
   actualCompletionDate?: string;
   isCancelled: boolean;
   isFinalized: boolean;
+  version: number;
   createdAt: string;
   ownerDepartment: Department;
   creator: { id: string; fullName: string };
@@ -29,10 +30,18 @@ interface Task {
   statusColor: string;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 type TabType = "in_progress" | "completed";
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtering, setFiltering] = useState(false);
@@ -40,6 +49,7 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [filterDepartment, setFilterDepartment] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("in_progress");
   const [formData, setFormData] = useState({
     content: "",
@@ -51,11 +61,24 @@ export default function TasksPage() {
     requiredCompletionDate: "",
   });
 
-  const fetchTasks = (deptId?: string, isFilter = false) => {
+  const fetchTasks = (params: {
+    deptId?: string;
+    page?: number;
+    search?: string;
+    isFilter?: boolean;
+  } = {}) => {
+    const { deptId, page = 1, search, isFilter } = params;
     if (isFilter) setFiltering(true);
-    const query = deptId ? `?departmentId=${deptId}` : "";
-    return apiFetch<{ data: Task[] }>(`/tasks${query}`)
-      .then((res) => setTasks(res.data))
+    const queryParams = new URLSearchParams();
+    if (deptId) queryParams.set("departmentId", deptId);
+    if (page) queryParams.set("page", page.toString());
+    if (search) queryParams.set("search", search);
+    const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+    return apiFetch<{ data: Task[]; pagination: Pagination }>(`/tasks${query}`)
+      .then((res) => {
+        setTasks(res.data);
+        setPagination(res.pagination);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setFiltering(false));
   };
@@ -67,7 +90,7 @@ export default function TasksPage() {
         if (res.data.length > 0) {
           const defaultDept = res.data[0].id;
           setFilterDepartment(defaultDept);
-          return fetchTasks(defaultDept);
+          return fetchTasks({ deptId: defaultDept });
         }
       }),
     ])
@@ -77,7 +100,16 @@ export default function TasksPage() {
 
   const handleFilterChange = (deptId: string) => {
     setFilterDepartment(deptId);
-    fetchTasks(deptId, true);
+    fetchTasks({ deptId, page: 1, isFilter: true });
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, isFilter: true });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    fetchTasks({ deptId: filterDepartment, page: newPage, search: searchQuery, isFilter: true });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -102,7 +134,7 @@ export default function TasksPage() {
         ownerDepartmentId: "",
         requiredCompletionDate: "",
       });
-      await fetchTasks(filterDepartment || undefined);
+      await fetchTasks({ deptId: filterDepartment, page: 1 });
     } catch (err: any) {
       alert("Lỗi: " + err.message);
     } finally {
@@ -114,7 +146,7 @@ export default function TasksPage() {
     if (!confirm("Bạn có chắc chắn muốn hủy nhiệm vụ này?")) return;
     try {
       await apiFetch(`/tasks/${taskId}/cancel`, { method: "PATCH" });
-      await fetchTasks(filterDepartment || undefined);
+      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery });
     } catch (err: any) {
       alert("Lỗi: " + err.message);
     }
@@ -168,6 +200,21 @@ export default function TasksPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <form onSubmit={handleSearch} className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Tìm kiếm..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="border border-border rounded-md px-3 py-2 text-sm bg-background"
+            />
+            <button
+              type="submit"
+              className="bg-secondary text-secondary-foreground px-3 py-2 rounded-md text-sm font-medium hover:bg-secondary/90"
+            >
+              Tìm
+            </button>
+          </form>
           <div className="relative">
             <select
               value={filterDepartment}
@@ -413,6 +460,33 @@ export default function TasksPage() {
             </tbody>
           </table>
         </div>
+
+        {pagination.totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              Hiển thị {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} trong {pagination.total} kết quả
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handlePageChange(pagination.page - 1)}
+                disabled={pagination.page === 1}
+                className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Trước
+              </button>
+              <span className="text-sm text-muted-foreground">
+                Trang {pagination.page} / {pagination.totalPages}
+              </span>
+              <button
+                onClick={() => handlePageChange(pagination.page + 1)}
+                disabled={pagination.page === pagination.totalPages}
+                className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
