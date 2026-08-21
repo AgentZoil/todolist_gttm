@@ -5,23 +5,18 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api";
 
 export function Header() {
-  const [email, setEmail] = useState<string>("");
+  const [fullName, setFullName] = useState<string>("");
   const router = useRouter();
   const supabase = createClient();
 
   useEffect(() => {
-    async function getUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        setEmail(user.email ?? "");
-      }
-    }
-    getUser();
-  }, [supabase]);
+    apiFetch<{ data: { fullName: string } }>("/auth/me")
+      .then((res) => setFullName(res.data.fullName))
+      .catch(() => {});
+  }, []);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -35,7 +30,7 @@ export function Header() {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <User className="h-4 w-4" />
-          <span>{email}</span>
+          <span>{fullName}</span>
         </div>
         <Button
           variant="ghost"

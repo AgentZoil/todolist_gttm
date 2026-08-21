@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsDateString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateTaskDto {
   @IsString()
@@ -35,7 +41,7 @@ export class CreateTaskDto {
   @MaxLength(500)
   coordinatingUnits?: string;
 
-  @IsUUID()
+  @IsString()
   @IsNotEmpty()
   ownerDepartmentId: string;
 
@@ -74,7 +80,7 @@ export class UpdateTaskDto {
   @MaxLength(50)
   documentNumber?: string;
 
-  @IsUUID()
+  @IsString()
   @IsOptional()
   ownerDepartmentId?: string;
 
@@ -95,6 +101,11 @@ export class UpdateTaskDto {
   @IsOptional()
   @MaxLength(1000)
   completionEvidence?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(1000)
+  incompleteReason?: string;
 
   @IsOptional()
   expectedVersion?: number;

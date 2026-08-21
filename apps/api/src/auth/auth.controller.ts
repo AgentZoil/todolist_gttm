@@ -16,10 +16,14 @@ export class AuthController {
   @Get('me')
   @UseGuards(AuthGuard)
   async getMe(@CurrentUser() user: CurrentUserType) {
-    const department = await this.prisma.department.findUnique({
-      where: { id: user.departmentId },
-      select: { id: true, name: true },
-    });
+    let departmentName: string | undefined;
+    if (user.departmentId) {
+      const department = await this.prisma.department.findUnique({
+        where: { id: user.departmentId },
+        select: { name: true },
+      });
+      departmentName = department?.name;
+    }
     return {
       data: {
         id: user.id,
@@ -27,7 +31,7 @@ export class AuthController {
         fullName: user.fullName,
         role: user.role,
         departmentId: user.departmentId,
-        departmentName: department?.name,
+        departmentName,
       },
     };
   }

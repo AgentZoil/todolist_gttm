@@ -1,15 +1,24 @@
-import { Injectable, ForbiddenException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  ForbiddenException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PeriodLockService } from '../period-lock/period-lock.service';
 import { calculateTaskStatus, getStatusLabel, getStatusColor } from './status';
 
 const NHOM_A_FIELDS = [
-  'content', 'source', 'assignedDate', 'assignedBy',
-  'documentNumber', 'ownerDepartmentId', 'requiredCompletionDate',
+  'content',
+  'source',
+  'assignedDate',
+  'assignedBy',
+  'documentNumber',
+  'ownerDepartmentId',
+  'requiredCompletionDate',
 ];
 
-const NHOM_B_FIELDS = ['actualCompletionDate', 'completionEvidence'];
+const NHOM_B_FIELDS = ['actualCompletionDate', 'completionEvidence', 'incompleteReason'];
 
 @Injectable()
 export class TasksService {
@@ -33,23 +42,25 @@ export class TasksService {
     };
   }
 
-  async findAll(params: {
-    departmentId?: string;
-    page?: number;
-    limit?: number;
-    search?: string;
-    status?: string;
-    sortBy?: string;
-    sortOrder?: 'asc' | 'desc';
-  } = {}) {
+  async findAll(
+    params: {
+      departmentId?: string;
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
+    } = {},
+  ) {
     const {
       departmentId,
       page = 1,
       limit = 20,
       search,
       status,
-      sortBy = 'createdAt',
-      sortOrder = 'desc',
+      sortBy = 'requiredCompletionDate',
+      sortOrder = 'asc',
     } = params;
 
     const where: any = {};
@@ -126,9 +137,13 @@ export class TasksService {
         title: true,
         content: true,
         source: true,
+        assignedDate: true,
+        assignedBy: true,
+        documentNumber: true,
         requiredCompletionDate: true,
         actualCompletionDate: true,
         completionEvidence: true,
+        incompleteReason: true,
         coordinatingUnits: true,
         isCancelled: true,
         cancelledAt: true,
@@ -172,6 +187,17 @@ export class TasksService {
     requiredCompletionDate?: string;
     createdBy: string;
   }) {
+    const assignedDate = new Date(data.assignedDate);
+    const requiredCompletionDate = data.requiredCompletionDate
+      ? new Date(data.requiredCompletionDate)
+      : null;
+
+    if (requiredCompletionDate && requiredCompletionDate < assignedDate) {
+      throw new ForbiddenException(
+        'Ngày yêu cầu hoàn thành không được sớm hơn ngày giao nhiệm vụ',
+      );
+    }
+
     const taskCode = `NV-${Date.now()}`;
 
     return this.prisma.task.create({
@@ -202,7 +228,9 @@ export class TasksService {
     userRole: string,
   ) {
     if (task.isFinalized && userRole !== 'ADMIN') {
-      throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể chỉnh sửa');
+      throw new ForbiddenException(
+        'Nhiệm vụ đã được chốt, không thể chỉnh sửa',
+      );
     }
 
     const nhomAKeys = Object.keys(data).filter((k) =>
@@ -250,13 +278,38 @@ export class TasksService {
     const oldTask = await this.prisma.task.findUnique({ where: { id } });
     if (!oldTask) throw new ForbiddenException('Task not found');
 
-    if (data.expectedVersion !== undefined && data.expectedVersion !== oldTask.version) {
+    if (
+      data.expectedVersion !== undefined &&
+      data.expectedVersion !== oldTask.version
+    ) {
       throw new ConflictException(
         'Nhiệm vụ đã bị thay đổi bởi người khác. Vui lòng tải lại trang.',
       );
     }
 
     await this.checkEditPermissions(oldTask, data, data.userRole);
+
+    const assignedDate = data.assignedDate
+      ? new Date(data.assignedDate)
+      : oldTask.assignedDate;
+    const requiredCompletionDate = data.requiredCompletionDate
+      ? new Date(data.requiredCompletionDate)
+      : oldTask.requiredCompletionDate;
+    const actualCompletionDate = data.actualCompletionDate
+      ? new Date(data.actualCompletionDate)
+      : oldTask.actualCompletionDate;
+
+    if (requiredCompletionDate && requiredCompletionDate < assignedDate) {
+      throw new ForbiddenException(
+        'Ngày yêu cầu hoàn thành không được sớm hơn ngày giao nhiệm vụ',
+      );
+    }
+
+    if (actualCompletionDate && actualCompletionDate < assignedDate) {
+      throw new ForbiddenException(
+        'Ngày hoàn thành thực tế không được sớm hơn ngày giao nhiệm vụ',
+      );
+    }
 
     const { userRole, expectedVersion, ...updateData } = data;
 
@@ -267,12 +320,16 @@ export class TasksService {
         assignedDate: updateData.assignedDate
           ? new Date(updateData.assignedDate)
           : undefined,
-        requiredCompletionDate: updateData.requiredCompletionDate
-          ? new Date(updateData.requiredCompletionDate)
-          : undefined,
-        actualCompletionDate: updateData.actualCompletionDate
-          ? new Date(updateData.actualCompletionDate)
-          : undefined,
+        requiredCompletionDate: updateData.requiredCompletionDate === null
+          ? null
+          : updateData.requiredCompletionDate
+            ? new Date(updateData.requiredCompletionDate)
+            : undefined,
+        actualCompletionDate: updateData.actualCompletionDate === null
+          ? null
+          : updateData.actualCompletionDate
+            ? new Date(updateData.actualCompletionDate)
+            : undefined,
         version: { increment: 1 },
       },
       include: {
@@ -282,16 +339,29 @@ export class TasksService {
     });
 
     const fieldsToTrack = [
-      'content', 'source', 'assignedDate', 'assignedBy',
-      'documentNumber', 'ownerDepartmentId', 'requiredCompletionDate',
-      'actualCompletionDate', 'completionEvidence',
+      'content',
+      'source',
+      'assignedDate',
+      'assignedBy',
+      'documentNumber',
+      'ownerDepartmentId',
+      'requiredCompletionDate',
+      'actualCompletionDate',
+      'completionEvidence',
+      'incompleteReason',
     ];
 
     for (const field of fieldsToTrack) {
       const oldValue = oldTask?.[field as keyof typeof oldTask];
       const newValue = updatedTask[field as keyof typeof updatedTask];
-      const oldStr = oldValue instanceof Date ? oldValue.toISOString() : String(oldValue ?? '');
-      const newStr = newValue instanceof Date ? newValue.toISOString() : String(newValue ?? '');
+      const oldStr =
+        oldValue instanceof Date
+          ? oldValue.toISOString()
+          : String(oldValue ?? '');
+      const newStr =
+        newValue instanceof Date
+          ? newValue.toISOString()
+          : String(newValue ?? '');
 
       if (oldStr !== newStr) {
         await this.auditLogService.log({
@@ -342,7 +412,9 @@ export class TasksService {
     }
 
     if (userRole === 'DEPARTMENT_EDITOR') {
-      if (task.ownerDepartmentId !== (await this.getDepartmentId(finalizedBy))) {
+      if (
+        task.ownerDepartmentId !== (await this.getDepartmentId(finalizedBy))
+      ) {
         throw new ForbiddenException('Chỉ chủ nhiệm vụ mới được chốt');
       }
     }
@@ -407,5 +479,33 @@ export class TasksService {
       select: { departmentId: true },
     });
     return user?.departmentId ?? '';
+  }
+
+  async remove(id: string, deletedBy: string, userRole: string) {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new ForbiddenException('Task not found');
+
+    if (userRole === 'DEPARTMENT_EDITOR') {
+      const deptId = await this.getDepartmentId(deletedBy);
+      if (task.ownerDepartmentId !== deptId) {
+        throw new ForbiddenException('Bạn không có quyền xóa nhiệm vụ này');
+      }
+    }
+
+    if (task.isFinalized && userRole !== 'ADMIN') {
+      throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể xóa');
+    }
+
+    await this.prisma.taskCoordinatingDepartment.deleteMany({ where: { taskId: id } });
+    await this.prisma.task.delete({ where: { id } });
+
+    await this.auditLogService.log({
+      userId: deletedBy,
+      action: 'DELETE',
+      entityType: 'TASK',
+      entityId: id,
+    });
+
+    return { success: true };
   }
 }

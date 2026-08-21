@@ -12,7 +12,12 @@ export class UsersService {
     });
   }
 
-  async create(data: { authUserId: string; fullName: string; roleId: string; departmentId: string }) {
+  async create(data: {
+    authUserId: string;
+    fullName: string;
+    roleId: string;
+    departmentId: string;
+  }) {
     return this.prisma.user.create({
       data,
       include: { role: true, department: true },

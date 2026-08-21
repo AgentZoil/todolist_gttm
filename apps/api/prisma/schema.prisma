@@ -68,6 +68,7 @@ model Task {
   requiredCompletionDate   DateTime? @map("required_completion_date")
   actualCompletionDate     DateTime? @map("actual_completion_date")
   completionEvidence       String?  @map("completion_evidence")
+  incompleteReason         String?  @map("incomplete_reason")
   isCancelled              Boolean  @default(false) @map("is_cancelled")
   cancelledAt              DateTime? @map("cancelled_at")
   cancelledBy              String?  @map("cancelled_by")

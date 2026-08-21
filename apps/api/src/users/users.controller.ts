@@ -17,7 +17,15 @@ export class UsersController {
 
   @Post()
   @Roles('ADMIN')
-  async create(@Body() body: { authUserId: string; fullName: string; roleId: string; departmentId: string }) {
+  async create(
+    @Body()
+    body: {
+      authUserId: string;
+      fullName: string;
+      roleId: string;
+      departmentId: string;
+    },
+  ) {
     const user = await this.usersService.create(body);
     return { data: user };
   }

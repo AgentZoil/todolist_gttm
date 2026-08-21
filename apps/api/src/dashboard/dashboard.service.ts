@@ -31,7 +31,9 @@ export class DashboardService {
   }
 
   async getSummary(month?: string) {
-    const targetMonth = month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const targetMonth =
+      month ||
+      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     const cacheKey = `summary:${targetMonth}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
@@ -67,11 +69,22 @@ export class DashboardService {
 
     const total = enrichedTasks.length;
     const completed = enrichedTasks.filter((t) =>
-      ['COMPLETED', 'COMPLETED_EARLY', 'COMPLETED_ON_TIME', 'COMPLETED_LATE'].includes(t.status),
+      [
+        'COMPLETED',
+        'COMPLETED_EARLY',
+        'COMPLETED_ON_TIME',
+        'COMPLETED_LATE',
+      ].includes(t.status),
     ).length;
-    const inProgress = enrichedTasks.filter((t) => t.status === 'IN_PROGRESS').length;
-    const overdue = enrichedTasks.filter((t) => t.status === 'COMPLETED_LATE').length;
-    const noEvaluation = enrichedTasks.filter((t) => t.status === 'NO_EVALUATION').length;
+    const inProgress = enrichedTasks.filter(
+      (t) => t.status === 'IN_PROGRESS',
+    ).length;
+    const overdue = enrichedTasks.filter(
+      (t) => t.status === 'COMPLETED_LATE',
+    ).length;
+    const noEvaluation = enrichedTasks.filter(
+      (t) => t.status === 'NO_EVALUATION',
+    ).length;
 
     const result = {
       month: targetMonth,
@@ -88,7 +101,9 @@ export class DashboardService {
   }
 
   async getDepartments(month?: string) {
-    const targetMonth = month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const targetMonth =
+      month ||
+      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
     const cacheKey = `departments:${targetMonth}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
@@ -139,10 +154,19 @@ export class DashboardService {
 
       const total = enrichedTasks.length;
       const completed = enrichedTasks.filter((t) =>
-        ['COMPLETED', 'COMPLETED_EARLY', 'COMPLETED_ON_TIME', 'COMPLETED_LATE'].includes(t.status),
+        [
+          'COMPLETED',
+          'COMPLETED_EARLY',
+          'COMPLETED_ON_TIME',
+          'COMPLETED_LATE',
+        ].includes(t.status),
       ).length;
-      const inProgress = enrichedTasks.filter((t) => t.status === 'IN_PROGRESS').length;
-      const overdue = enrichedTasks.filter((t) => t.status === 'COMPLETED_LATE').length;
+      const inProgress = enrichedTasks.filter(
+        (t) => t.status === 'IN_PROGRESS',
+      ).length;
+      const overdue = enrichedTasks.filter(
+        (t) => t.status === 'COMPLETED_LATE',
+      ).length;
 
       return {
         departmentId: dept.id,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 
 interface Role {
@@ -24,6 +25,7 @@ interface User {
 }
 
 export default function UsersPage() {
+  const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -38,12 +40,21 @@ export default function UsersPage() {
   });
 
   useEffect(() => {
-    Promise.all([
-      apiFetch<{ data: User[] }>("/users"),
-      apiFetch<{ data: Role[] }>("/auth/roles"),
-      apiFetch<{ data: Department[] }>("/departments"),
-    ])
-      .then(([usersRes, rolesRes, deptsRes]) => {
+    apiFetch<{ data: { role: string } }>("/auth/me")
+      .then((res) => {
+        if (!["ADMIN", "SECRETARY"].includes(res.data.role)) {
+          router.replace("/dashboard");
+          return;
+        }
+        return Promise.all([
+          apiFetch<{ data: User[] }>("/users"),
+          apiFetch<{ data: Role[] }>("/auth/roles"),
+          apiFetch<{ data: Department[] }>("/departments"),
+        ]);
+      })
+      .then((result) => {
+        if (!result) return;
+        const [usersRes, rolesRes, deptsRes] = result;
         setUsers(usersRes.data);
         setRoles(rolesRes.data);
         setDepartments(deptsRes.data);
@@ -206,7 +217,7 @@ export default function UsersPage() {
                     {user.role.name}
                   </span>
                 </td>
-                <td className="p-3">{user.department.name}</td>
+                <td className="p-3">{user.department?.name || '—'}</td>
                 <td className="p-3">
                   <span
                     className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${

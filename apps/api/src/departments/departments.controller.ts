@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Patch, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -24,7 +32,10 @@ export class DepartmentsController {
 
   @Patch(':id')
   @Roles('ADMIN')
-  async update(@Param('id') id: string, @Body() body: { name?: string; isActive?: boolean }) {
+  async update(
+    @Param('id') id: string,
+    @Body() body: { name?: string; isActive?: boolean },
+  ) {
     const department = await this.departmentsService.update(id, body);
     return { data: department };
   }

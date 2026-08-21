@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 
 interface AuditLog {
@@ -16,13 +17,23 @@ interface AuditLog {
 }
 
 export default function AuditLogsPage() {
+  const router = useRouter();
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<{ data: AuditLog[] }>("/audit-logs")
-      .then((res) => setLogs(res.data))
+    apiFetch<{ data: { role: string } }>("/auth/me")
+      .then((res) => {
+        if (!["ADMIN", "SECRETARY"].includes(res.data.role)) {
+          router.replace("/dashboard");
+          return;
+        }
+        return apiFetch<{ data: AuditLog[] }>("/audit-logs");
+      })
+      .then((res) => {
+        if (res) setLogs(res.data);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);

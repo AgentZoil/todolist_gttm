@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -11,8 +12,13 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api";
 
-const navItems = [
+interface UserInfo {
+  role: string;
+}
+
+const allNavItems = [
   {
     label: "Dashboard",
     href: "/dashboard",
@@ -32,16 +38,29 @@ const navItems = [
     label: "Người dùng",
     href: "/users",
     icon: Users,
+    roles: ["ADMIN", "SECRETARY"],
   },
   {
     label: "Audit Log",
     href: "/audit-logs",
     icon: ScrollText,
+    roles: ["ADMIN"],
   },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ data: UserInfo }>("/auth/me")
+      .then((res) => setUserRole(res.data.role))
+      .catch(() => {});
+  }, []);
+
+  const navItems = allNavItems.filter(
+    (item) => !item.roles || (userRole && item.roles.includes(userRole))
+  );
 
   return (
     <aside className="w-64 border-r border-border bg-card flex flex-col">

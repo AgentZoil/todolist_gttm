@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Patch, Param, Body, Query, UseGuards, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  ForbiddenException,
+} from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -77,10 +88,7 @@ export class TasksController {
 
   @Patch(':id/cancel')
   @Roles('ADMIN', 'SECRETARY')
-  async cancel(
-    @Param('id') id: string,
-    @CurrentUser() user: { id: string },
-  ) {
+  async cancel(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     const task = await this.tasksService.cancel(id, user.id);
     return { data: task };
   }
@@ -102,5 +110,14 @@ export class TasksController {
   ) {
     const task = await this.tasksService.unfinalize(id, user.id);
     return { data: task };
+  }
+
+  @Delete(':id')
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    const result = await this.tasksService.remove(id, user.id, user.role);
+    return result;
   }
 }

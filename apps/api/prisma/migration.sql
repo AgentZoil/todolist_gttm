@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   required_completion_date TIMESTAMPTZ,
   actual_completion_date TIMESTAMPTZ,
   completion_evidence TEXT,
+  incomplete_reason TEXT,
   is_cancelled BOOLEAN NOT NULL DEFAULT false,
   cancelled_at TIMESTAMPTZ,
   cancelled_by TEXT,

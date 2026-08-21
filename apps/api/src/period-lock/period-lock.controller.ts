@@ -1,4 +1,11 @@
-import { Controller, Get, Post, Delete, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Delete,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
 import { PeriodLockService } from './period-lock.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -33,10 +40,7 @@ export class PeriodLockController {
 
   @Delete(':year/:month')
   @Roles('ADMIN')
-  async unlock(
-    @Param('year') year: string,
-    @Param('month') month: string,
-  ) {
+  async unlock(@Param('year') year: string, @Param('month') month: string) {
     await this.periodLockService.unlockPeriod(parseInt(year), parseInt(month));
     return { message: 'Unlocked' };
   }

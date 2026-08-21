@@ -48,9 +48,7 @@ export class AuthGuard implements CanActivate {
       throw new UnauthorizedException('Missing authorization token');
     }
 
-    const { data, error } = await this.supabase
-      .getClient()
-      .auth.getUser(token);
+    const { data, error } = await this.supabase.getClient().auth.getUser(token);
 
     if (error || !data.user) {
       throw new UnauthorizedException('Invalid or expired token');
