@@ -261,6 +261,7 @@ export class TasksService {
   async update(
     id: string,
     data: {
+      title?: string;
       content?: string;
       source?: string;
       assignedDate?: string;
@@ -270,6 +271,8 @@ export class TasksService {
       requiredCompletionDate?: string;
       actualCompletionDate?: string;
       completionEvidence?: string;
+      incompleteReason?: string;
+      coordinatingUnits?: string;
       expectedVersion?: number;
       updatedBy: string;
       userRole: string;
@@ -313,25 +316,40 @@ export class TasksService {
 
     const { userRole, expectedVersion, ...updateData } = data;
 
+    const prismaData: Record<string, any> = {
+      version: { increment: 1 },
+    };
+
+    if (updateData.title !== undefined) prismaData.title = updateData.title;
+    if (updateData.content !== undefined) prismaData.content = updateData.content;
+    if (updateData.source !== undefined) prismaData.source = updateData.source;
+    if (updateData.assignedBy !== undefined) prismaData.assignedBy = updateData.assignedBy;
+    if (updateData.documentNumber !== undefined) prismaData.documentNumber = updateData.documentNumber;
+    if (updateData.ownerDepartmentId !== undefined) prismaData.ownerDepartmentId = updateData.ownerDepartmentId;
+    if (updateData.coordinatingUnits !== undefined) prismaData.coordinatingUnits = updateData.coordinatingUnits;
+    if (updateData.completionEvidence !== undefined) prismaData.completionEvidence = updateData.completionEvidence;
+    if (updateData.incompleteReason !== undefined) prismaData.incompleteReason = updateData.incompleteReason;
+    if (updateData.updatedBy !== undefined) prismaData.updatedBy = updateData.updatedBy;
+
+    if (updateData.assignedDate) {
+      prismaData.assignedDate = new Date(updateData.assignedDate);
+    }
+
+    if (updateData.requiredCompletionDate === null) {
+      prismaData.requiredCompletionDate = null;
+    } else if (updateData.requiredCompletionDate) {
+      prismaData.requiredCompletionDate = new Date(updateData.requiredCompletionDate);
+    }
+
+    if (updateData.actualCompletionDate === null) {
+      prismaData.actualCompletionDate = null;
+    } else if (updateData.actualCompletionDate) {
+      prismaData.actualCompletionDate = new Date(updateData.actualCompletionDate);
+    }
+
     const updatedTask = await this.prisma.task.update({
       where: { id },
-      data: {
-        ...updateData,
-        assignedDate: updateData.assignedDate
-          ? new Date(updateData.assignedDate)
-          : undefined,
-        requiredCompletionDate: updateData.requiredCompletionDate === null
-          ? null
-          : updateData.requiredCompletionDate
-            ? new Date(updateData.requiredCompletionDate)
-            : undefined,
-        actualCompletionDate: updateData.actualCompletionDate === null
-          ? null
-          : updateData.actualCompletionDate
-            ? new Date(updateData.actualCompletionDate)
-            : undefined,
-        version: { increment: 1 },
-      },
+      data: prismaData,
       include: {
         ownerDepartment: true,
         coordinatingDepts: { include: { department: true } },
