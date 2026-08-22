@@ -11,6 +11,10 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Hệ thống theo dõi nhiệm vụ",
   description: "Quản lý, theo dõi và tổng hợp tình trạng thực hiện nhiệm vụ",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
