@@ -11,6 +11,8 @@ import {
   CalendarX,
   TrendingUp,
 } from "lucide-react";
+import { TaskStatusDonut } from "@/components/charts/task-status-donut";
+import { DepartmentStackedBar } from "@/components/charts/department-stacked-bar";
 
 interface DepartmentStats {
   departmentId: string;
@@ -183,30 +185,61 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Completion Rate */}
-      <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary to-secondary shadow-lg shadow-primary/10">
-        <CardContent className="py-5">
-          <div className="flex items-center justify-between text-primary-foreground">
-            <div>
-              <p className="text-sm font-medium opacity-80">Tỷ lệ hoàn thành</p>
-              <p className="mt-1 text-4xl font-bold tabular-nums">{totals.completionRate}%</p>
-            </div>
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
-              <TrendingUp className="h-8 w-8" />
-            </div>
+      {/* Charts Row: Donut + Completion Summary */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Donut Chart */}
+        <Card>
+          <div className="px-6 pt-5 pb-2">
+            <h3 className="text-sm font-semibold text-foreground">Phân bổ trạng thái</h3>
           </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/20">
-            <div
-              className="h-full rounded-full bg-white transition-all duration-700 ease-out"
-              style={{ width: `${totals.completionRate}%` }}
+          <CardContent className="pb-4">
+            <TaskStatusDonut
+              completedOnTime={totals.completedOnTime}
+              completedLate={totals.completedLate}
+              inProgressOnTime={totals.inProgressOnTime}
+              inProgressLate={totals.inProgressLate}
+              noEvaluation={totals.noEvaluation}
+              completionRate={totals.completionRate}
+              total={totals.total}
             />
-          </div>
-          <div className="mt-2 flex justify-between text-xs opacity-70">
-            <span>0%</span>
-            <span>100%</span>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        {/* Completion Summary */}
+        <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary to-secondary shadow-lg shadow-primary/10">
+          <CardContent className="py-6">
+            <div className="flex items-center justify-between text-primary-foreground">
+              <div>
+                <p className="text-sm font-medium opacity-80">Tỷ lệ hoàn thành</p>
+                <p className="mt-1 text-5xl font-bold tabular-nums">{totals.completionRate}%</p>
+              </div>
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
+                <TrendingUp className="h-8 w-8" />
+              </div>
+            </div>
+            <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-white/20">
+              <div
+                className="h-full rounded-full bg-white transition-all duration-700 ease-out"
+                style={{ width: `${totals.completionRate}%` }}
+              />
+            </div>
+            <div className="mt-2 flex justify-between text-xs opacity-70">
+              <span>0%</span>
+              <span>100%</span>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur-sm">
+                <p className="text-xs opacity-70">Hoàn thành</p>
+                <p className="text-lg font-bold tabular-nums">{totals.completedOnTime + totals.completedLate}</p>
+              </div>
+              <div className="rounded-xl bg-white/10 px-4 py-3 backdrop-blur-sm">
+                <p className="text-xs opacity-70">Chưa hoàn thành</p>
+                <p className="text-lg font-bold tabular-nums">{totals.inProgressOnTime + totals.inProgressLate}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Department Table */}
       <Card>
@@ -302,6 +335,18 @@ export default function DashboardPage() {
           </table>
         </div>
       </Card>
+
+      {/* Stacked Bar Chart */}
+      {departments.length > 0 && (
+        <Card>
+          <div className="px-6 pt-5 pb-2">
+            <h3 className="text-sm font-semibold text-foreground">So sánh phòng ban</h3>
+          </div>
+          <CardContent className="pb-4">
+            <DepartmentStackedBar departments={departments} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
