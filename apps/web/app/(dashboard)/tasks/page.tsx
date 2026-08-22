@@ -2,6 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  ListTodo,
+  Plus,
+  X,
+  AlertTriangle,
+  CheckCircle2,
+  AlertCircle,
+  Trash2,
+  Pencil,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Building2,
+  Loader2,
+  XCircle,
+} from "lucide-react";
 
 interface Department {
   id: string;
@@ -334,14 +353,10 @@ export default function TasksPage() {
 
   if (loading) {
     return (
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nhiệm vụ</h1>
-        <div className="flex items-center gap-2 text-muted-foreground mt-2">
-          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          <span>Đang tải dữ liệu...</span>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <span className="text-sm text-muted-foreground">Đang tải dữ liệu...</span>
         </div>
       </div>
     );
@@ -349,189 +364,180 @@ export default function TasksPage() {
 
   if (error) {
     return (
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Nhiệm vụ</h1>
-        <p className="text-destructive mt-2">Lỗi: {error}</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-sm w-full">
+          <CardContent className="flex flex-col items-center gap-3 py-8">
+            <AlertTriangle className="h-10 w-10 text-destructive" />
+            <p className="text-destructive font-medium">Lỗi: {error}</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       {validationMsg && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md" style={{ animation: "fadeIn 0.2s ease-out" }}>
-          <div className="bg-white border-l-4 border-red-500 rounded-md shadow-md px-4 py-3 flex items-center gap-3">
-            <div className="shrink-0 w-8 h-8 rounded-full bg-red-50 flex items-center justify-center">
-              <svg className="w-5 h-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="bg-card border border-border rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 ring-1 ring-foreground/5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+              <AlertCircle className="h-4 w-4 text-destructive" />
             </div>
-            <span className="text-sm text-gray-700">{validationMsg}</span>
-            <button onClick={() => setValidationMsg(null)} className="ml-auto shrink-0 text-gray-400 hover:text-gray-600">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            <span className="text-sm text-foreground flex-1">{validationMsg}</span>
+            <button onClick={() => setValidationMsg(null)} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
       )}
       {deleteMsg && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md" style={{ animation: "fadeIn 0.2s ease-out" }}>
-          <div className="bg-white border-l-4 border-green-500 rounded-md shadow-md px-4 py-3 flex items-center gap-3">
-            <div className="shrink-0 w-8 h-8 rounded-full bg-green-50 flex items-center justify-center">
-              <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="bg-card border border-border rounded-xl shadow-lg px-4 py-3 flex items-center gap-3 ring-1 ring-foreground/5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-50">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             </div>
-            <span className="text-sm text-gray-700">{deleteMsg}</span>
-            <button onClick={() => setDeleteMsg(null)} className="ml-auto shrink-0 text-gray-400 hover:text-gray-600">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+            <span className="text-sm text-foreground flex-1">{deleteMsg}</span>
+            <button onClick={() => setDeleteMsg(null)} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
       )}
       {confirmDeleteId && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-md" style={{ animation: "fadeIn 0.2s ease-out" }}>
-          <div className="bg-white border-l-4 border-orange-500 rounded-md shadow-md px-4 py-3 flex items-center gap-3">
-            <div className="shrink-0 w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center">
-              <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)} />
+          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-sm mx-4 p-6 ring-1 ring-foreground/5">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 mb-4">
+                <Trash2 className="h-6 w-6 text-destructive" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground">Xóa nhiệm vụ?</h3>
+              <p className="text-sm text-muted-foreground mt-1">Hành động này không thể hoàn tác.</p>
             </div>
-            <span className="text-sm text-gray-700 flex-1">Bạn có chắc chắn muốn xóa nhiệm vụ này?</span>
-            <button
-              onClick={() => { handleDelete(confirmDeleteId); setConfirmDeleteId(null); }}
-              className="text-sm px-3 py-1 rounded-md bg-red-500 text-white hover:bg-red-600 font-medium"
-            >
-              Xóa
-            </button>
-            <button
-              onClick={() => setConfirmDeleteId(null)}
-              className="text-sm px-3 py-1 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"
-            >
-              Hủy
-            </button>
+            <div className="mt-6 flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setConfirmDeleteId(null)}>
+                Hủy
+              </Button>
+              <Button variant="destructive" className="flex-1" onClick={() => { handleDelete(confirmDeleteId); setConfirmDeleteId(null); }}>
+                Xóa
+              </Button>
+            </div>
           </div>
         </div>
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Nhiệm vụ</h1>
-          <p className="text-muted-foreground mt-2">
-            Quản lý nhiệm vụ theo phòng ban
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <ListTodo className="h-6 w-6 text-primary" />
+            Nhiệm vụ
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Quản lý nhiệm vụ theo phòng ban</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <div className="relative">
             <select
               value={filterDepartment}
               onChange={(e) => handleFilterChange(e.target.value)}
               disabled={filtering}
-              className="border border-border rounded-md px-3 py-2 text-sm bg-background disabled:opacity-50"
+              className="h-9 rounded-lg border border-border bg-card px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors disabled:opacity-50"
             >
               {departments.map((dept) => (
-                <option key={dept.id} value={dept.id}>
-                  {dept.name}
-                </option>
+                <option key={dept.id} value={dept.id}>{dept.name}</option>
               ))}
             </select>
             {filtering && (
-              <div className="absolute right-8 top-1/2 -translate-y-1/2">
-                <svg className="animate-spin h-3 w-3 text-muted-foreground" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
               </div>
             )}
           </div>
           {canEditTasks && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
-            >
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              <Plus className="h-4 w-4" />
               Thêm nhiệm vụ
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {canEditTasks && showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/50" onClick={() => !submitting && setShowForm(false)} />
-          <div className="relative bg-card rounded-lg shadow-lg border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !submitting && setShowForm(false)} />
+          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground">Thêm nhiệm vụ mới</h2>
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <Plus className="h-4 w-4 text-primary" />
+                </span>
+                <h2 className="text-lg font-semibold text-foreground">Thêm nhiệm vụ mới</h2>
+              </div>
               <button
                 onClick={() => !submitting && setShowForm(false)}
                 className="text-muted-foreground hover:text-foreground"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="h-5 w-5" />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Tiêu đề nhiệm vụ
                   </label>
                   <input
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     placeholder="Nhập tiêu đề ngắn gọn"
                     required
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Nội dung nhiệm vụ
                   </label>
                   <textarea
                     value={formData.content}
                     onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     rows={3}
                     placeholder="Mô tả chi tiết nhiệm vụ"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Nguồn giao NV
                   </label>
                   <input
                     type="text"
                     value={formData.source}
                     onChange={(e) => setFormData({ ...formData, source: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Ngày giao NV
                   </label>
                   <input
                     type="date"
                     value={formData.assignedDate}
                     onChange={(e) => setFormData({ ...formData, assignedDate: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Lãnh đạo giao NV
                   </label>
                   <select
                     value={formData.assignedBy}
                     onChange={(e) => setFormData({ ...formData, assignedBy: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     required
                   >
                     <option value="">Chọn lãnh đạo</option>
@@ -546,38 +552,38 @@ export default function TasksPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Số/ký hiệu VB
                   </label>
                   <input
                     type="text"
                     value={formData.documentNumber}
                     onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     required
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Đơn vị phối hợp cùng
                   </label>
                   <input
                     type="text"
                     value={formData.coordinatingUnits}
                     onChange={(e) => setFormData({ ...formData, coordinatingUnits: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     placeholder="Nhập đơn vị phối hợp (nếu có)"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Đơn vị thực hiện
                   </label>
                   {canChooseDepartment ? (
                     <select
                       value={formData.ownerDepartmentId}
                       onChange={(e) => setFormData({ ...formData, ownerDepartmentId: e.target.value })}
-                      className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                      className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                       required
                     >
                       <option value="">Chọn phòng ban</option>
@@ -591,49 +597,45 @@ export default function TasksPage() {
                     <input
                       type="text"
                       value={userInfo?.departmentName || ""}
-                      className="w-full border border-border rounded-md px-3 py-2 text-sm bg-muted"
+                      className="h-9 w-full rounded-lg border border-border bg-muted px-3 text-sm"
                       disabled
                     />
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-1">
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
                     Ngày YC hoàn thành
                   </label>
                   <input
                     type="date"
                     value={formData.requiredCompletionDate}
                     onChange={(e) => setFormData({ ...formData, requiredCompletionDate: e.target.value })}
-                    className="w-full border border-border rounded-md px-3 py-2 text-sm"
+                    className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                   />
                 </div>
               </div>
-              <div className="mt-4 flex gap-2 justify-end">
-                <button
+              <div className="mt-5 flex gap-2 justify-end">
+                <Button
                   type="button"
+                  variant="outline"
                   onClick={() => !submitting && setShowForm(false)}
                   disabled={submitting}
-                  className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-secondary/90 disabled:opacity-50"
                 >
                   Hủy
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={submitting}
-                  className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {submitting ? (
                     <>
-                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       Đang tạo...
                     </>
                   ) : (
                     "Tạo"
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
@@ -643,8 +645,8 @@ export default function TasksPage() {
       {/* Detail modal */}
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/50" onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }} />
-          <div className="relative bg-card rounded-lg shadow-lg border border-border w-full max-w-5xl max-h-[90vh] overflow-y-auto mx-4">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }} />
+          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-5xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-semibold text-foreground">
                 {editingDetail ? "Chỉnh sửa nhiệm vụ" : "Chi tiết nhiệm vụ"}
@@ -652,58 +654,51 @@ export default function TasksPage() {
               <div className="flex items-center gap-2">
                 {editingDetail ? (
                   <>
-                    <button
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() => setEditingDetail(false)}
                       disabled={savingEdit}
-                      className="text-sm px-3 py-1.5 rounded-md border border-border text-muted-foreground hover:bg-muted disabled:opacity-50"
                     >
                       Hủy
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      size="sm"
                       onClick={handleSaveDetail}
                       disabled={savingEdit}
-                      className="text-sm px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
                     >
                       {savingEdit && (
-                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
+                        <Loader2 className="h-3 w-3 animate-spin" />
                       )}
                       Lưu
-                    </button>
+                    </Button>
                   </>
                 ) : (
                   <>
                     {canEditDetail && !detailTask?.isFinalized && !detailTask?.isCancelled && (
-                      <button
+                      <Button
+                        size="sm"
                         onClick={handleStartEdit}
-                        className="text-sm px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
+                        <Pencil className="h-3.5 w-3.5" />
                         Thay đổi
-                      </button>
+                      </Button>
                     )}
                     {canDeleteDetail && !detailTask?.isCancelled && (
-                      <button
+                      <Button
+                        size="sm"
+                        variant="destructive"
                         onClick={() => setConfirmDeleteId(detailTask!.id)}
-                        className="text-sm px-3 py-1.5 rounded-md bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 flex items-center gap-1"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
+                        <Trash2 className="h-3.5 w-3.5" />
                         Xóa
-                      </button>
+                      </Button>
                     )}
                     <button
                       onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }}
                       className="text-muted-foreground hover:text-foreground"
                     >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
+                      <X className="h-5 w-5" />
                     </button>
                   </>
                 )}
@@ -712,10 +707,7 @@ export default function TasksPage() {
             <div className="p-4">
               {loadingDetail ? (
                 <div className="flex items-center justify-center py-8 text-muted-foreground">
-                  <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
                   Đang tải...
                 </div>
               ) : detailTask ? (
@@ -728,7 +720,7 @@ export default function TasksPage() {
                           type="text"
                           value={editFormData.title}
                           onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                          className="w-full text-lg font-semibold text-foreground border border-border rounded-md px-3 py-1.5 bg-background"
+                          className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                         />
                       ) : (
                         <h3 className="text-lg font-semibold text-foreground leading-tight">{detailTask.title}</h3>
@@ -753,7 +745,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Nguồn giao NV</label>
                         {editingDetail ? (
-                          <input type="text" value={editFormData.source} onChange={(e) => setEditFormData({ ...editFormData, source: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <input type="text" value={editFormData.source} onChange={(e) => setEditFormData({ ...editFormData, source: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.source}</p>
                         )}
@@ -761,7 +753,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Số/ký hiệu VB</label>
                         {editingDetail ? (
-                          <input type="text" value={editFormData.documentNumber} onChange={(e) => setEditFormData({ ...editFormData, documentNumber: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <input type="text" value={editFormData.documentNumber} onChange={(e) => setEditFormData({ ...editFormData, documentNumber: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.documentNumber || "—"}</p>
                         )}
@@ -769,7 +761,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Lãnh đạo giao NV</label>
                         {editingDetail ? (
-                          <select value={editFormData.assignedBy} onChange={(e) => setEditFormData({ ...editFormData, assignedBy: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1">
+                          <select value={editFormData.assignedBy} onChange={(e) => setEditFormData({ ...editFormData, assignedBy: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1">
                             <option value="">Chọn lãnh đạo</option>
                             <option value="Cục trưởng Bùi Quang Thái">Cục trưởng Bùi Quang Thái</option>
                             <option value="PCT Nguyễn Mạnh Thắng">PCT Nguyễn Mạnh Thắng</option>
@@ -787,7 +779,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày giao NV</label>
                         {editingDetail ? (
-                          <input type="date" value={editFormData.assignedDate} onChange={(e) => setEditFormData({ ...editFormData, assignedDate: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <input type="date" value={editFormData.assignedDate} onChange={(e) => setEditFormData({ ...editFormData, assignedDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{formatDate(detailTask.assignedDate)}</p>
                         )}
@@ -795,7 +787,7 @@ export default function TasksPage() {
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Nội dung nhiệm vụ</label>
                         {editingDetail ? (
-                          <textarea value={editFormData.content} onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })} rows={3} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <textarea value={editFormData.content} onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })} rows={3} className="min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
                           <p className="text-sm text-foreground mt-0.5 leading-relaxed">{detailTask.content}</p>
                         )}
@@ -819,7 +811,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Đơn vị phối hợp</label>
                         {editingDetail ? (
-                          <input type="text" value={editFormData.coordinatingUnits} onChange={(e) => setEditFormData({ ...editFormData, coordinatingUnits: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" placeholder="Nhập đơn vị phối hợp" />
+                          <input type="text" value={editFormData.coordinatingUnits} onChange={(e) => setEditFormData({ ...editFormData, coordinatingUnits: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" placeholder="Nhập đơn vị phối hợp" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.coordinatingUnits || "—"}</p>
                         )}
@@ -836,7 +828,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày YC hoàn thành</label>
                         {editingDetail ? (
-                          <input type="date" value={editFormData.requiredCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, requiredCompletionDate: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <input type="date" value={editFormData.requiredCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, requiredCompletionDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.requiredCompletionDate ? formatDate(detailTask.requiredCompletionDate) : "—"}</p>
                         )}
@@ -844,7 +836,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày hoàn thành thực tế</label>
                         {editingDetail ? (
-                          <input type="date" value={editFormData.actualCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, actualCompletionDate: e.target.value })} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <input type="date" value={editFormData.actualCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, actualCompletionDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.actualCompletionDate ? formatDate(detailTask.actualCompletionDate) : "—"}</p>
                         )}
@@ -852,7 +844,7 @@ export default function TasksPage() {
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Bằng chứng hoàn thành</label>
                         {editingDetail ? (
-                          <textarea value={editFormData.completionEvidence} onChange={(e) => setEditFormData({ ...editFormData, completionEvidence: e.target.value })} rows={2} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <textarea value={editFormData.completionEvidence} onChange={(e) => setEditFormData({ ...editFormData, completionEvidence: e.target.value })} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
                           <p className="text-sm text-foreground mt-0.5">{detailTask.completionEvidence || "—"}</p>
                         )}
@@ -860,7 +852,7 @@ export default function TasksPage() {
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Lý do chưa hoàn thành</label>
                         {editingDetail ? (
-                          <textarea value={editFormData.incompleteReason} onChange={(e) => setEditFormData({ ...editFormData, incompleteReason: e.target.value })} rows={2} className="w-full border border-border rounded-md px-3 py-1.5 text-sm bg-background mt-1" />
+                          <textarea value={editFormData.incompleteReason} onChange={(e) => setEditFormData({ ...editFormData, incompleteReason: e.target.value })} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
                           <p className="text-sm text-foreground mt-0.5">{detailTask.incompleteReason || "—"}</p>
                         )}
@@ -876,14 +868,11 @@ export default function TasksPage() {
       )}
 
       <div className="mt-6">
-        <div className="rounded-lg border border-border overflow-hidden relative">
+        <Card className="overflow-hidden relative">
           {filtering && (
             <div className="absolute inset-0 bg-background/60 flex items-center justify-center z-10">
               <div className="flex items-center gap-2 text-muted-foreground">
-                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+                <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-sm">Đang tải...</span>
               </div>
             </div>
@@ -891,14 +880,14 @@ export default function TasksPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm table-fixed">
               <thead>
-                <tr className="bg-muted">
-                  <th className="text-center px-3 py-3 font-medium text-muted-foreground w-10">STT</th>
-                  <th className="text-left px-3 py-3 font-medium text-muted-foreground">Tiêu đề</th>
-                  <th className="text-left px-3 py-3 font-medium text-muted-foreground whitespace-nowrap w-[260px]">Lãnh đạo giao NV</th>
-                  <th className="text-left px-3 py-3 font-medium text-muted-foreground whitespace-nowrap w-[180px]">Ngày giao NV</th>
-                  <th className="text-left px-3 py-3 font-medium text-muted-foreground whitespace-nowrap w-[180px]">Ngày YC HT</th>
-                  <th className="text-left px-3 py-3 font-medium text-muted-foreground whitespace-nowrap w-[170px]">Ngày HT thực tế</th>
-                  <th className="text-center px-3 py-3 font-medium text-muted-foreground whitespace-nowrap w-[200px]">Tình trạng</th>
+                <tr className="border-b border-border">
+                  <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">STT</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tiêu đề</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[260px]">Lãnh đạo giao NV</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[180px]">Ngày giao NV</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[180px]">Ngày YC HT</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[170px]">Ngày HT thực tế</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[200px]">Tình trạng</th>
                 </tr>
               </thead>
               <tbody>
@@ -912,7 +901,7 @@ export default function TasksPage() {
                   filteredTasks.map((task, index) => (
                     <tr
                       key={task.id}
-                      className="border-t border-border hover:bg-muted/50 cursor-pointer"
+                      className={cn("border-b border-border/50 transition-colors hover:bg-muted/30 cursor-pointer", index % 2 === 0 ? "bg-card" : "bg-muted/10")}
                       onClick={() => handleViewDetail(task)}
                     >
                       <td className="px-3 py-2 text-center text-muted-foreground">{index + 1}</td>
@@ -933,7 +922,7 @@ export default function TasksPage() {
                       </td>
                       <td className="px-3 py-2 text-center">
                         <span
-                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${STATUS_COLORS[task.status] || "bg-gray-100 text-gray-600"}`}
+                          className={cn("inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-semibold ring-1", STATUS_COLORS[task.status] || "bg-gray-100 text-gray-600")}
                         >
                           {task.statusLabel}
                         </span>
@@ -944,7 +933,7 @@ export default function TasksPage() {
               </tbody>
             </table>
           </div>
-        </div>
+        </Card>
 
         {pagination.totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
@@ -952,23 +941,27 @@ export default function TasksPage() {
               Hiển thị {(pagination.page - 1) * pagination.limit + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} trong {pagination.total} kết quả
             </p>
             <div className="flex items-center gap-2">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handlePageChange(pagination.page - 1)}
                 disabled={pagination.page === 1}
-                className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                <ChevronLeft className="h-4 w-4" />
                 Trước
-              </button>
+              </Button>
               <span className="text-sm text-muted-foreground">
                 Trang {pagination.page} / {pagination.totalPages}
               </span>
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => handlePageChange(pagination.page + 1)}
                 disabled={pagination.page === pagination.totalPages}
-                className="px-3 py-1 text-sm border border-border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Sau
-              </button>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         )}
