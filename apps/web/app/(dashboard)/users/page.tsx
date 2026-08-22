@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Users, UserPlus, X, AlertTriangle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Role {
   id: string;
@@ -23,6 +27,13 @@ interface User {
   role: Role;
   department: Department;
 }
+
+const ROLE_BADGE: Record<string, string> = {
+  ADMIN: "bg-primary/10 text-primary ring-primary/20",
+  SECRETARY: "bg-secondary/10 text-secondary ring-secondary/20",
+  DEPARTMENT_EDITOR: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  VIEWER: "bg-muted text-muted-foreground ring-border",
+};
 
 export default function UsersPage() {
   const router = useRouter();
@@ -81,159 +92,239 @@ export default function UsersPage() {
 
   if (loading) {
     return (
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Người dùng</h1>
-        <p className="text-muted-foreground mt-2">Đang tải...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
+          <span className="text-sm text-muted-foreground">Đang tải dữ liệu...</span>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Người dùng</h1>
-        <p className="text-destructive mt-2">Lỗi: {error}</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="max-w-sm w-full">
+          <CardContent className="flex flex-col items-center gap-3 py-8">
+            <AlertTriangle className="h-10 w-10 text-destructive" />
+            <p className="text-destructive font-medium">Lỗi: {error}</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
+  const INPUT_CLASS =
+    "h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors";
+
   return (
-    <div>
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Người dùng</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl font-bold tracking-tight">Người dùng</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Quản lý {users.length} người dùng
           </p>
         </div>
-        <button
+        <Button
           onClick={() => setShowForm(!showForm)}
-          className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
+          variant={showForm ? "outline" : "default"}
+          className="gap-1.5"
         >
-          {showForm ? "Đóng" : "Thêm người dùng"}
-        </button>
+          {showForm ? (
+            <>
+              <X className="h-4 w-4" />
+              Đóng
+            </>
+          ) : (
+            <>
+              <UserPlus className="h-4 w-4" />
+              Thêm người dùng
+            </>
+          )}
+        </Button>
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="mt-4 p-4 border border-border rounded-lg bg-card">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Auth User ID (từ Supabase)
-              </label>
-              <input
-                type="text"
-                value={formData.authUserId}
-                onChange={(e) => setFormData({ ...formData, authUserId: e.target.value })}
-                className="w-full border border-border rounded-md px-3 py-2 text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Họ tên
-              </label>
-              <input
-                type="text"
-                value={formData.fullName}
-                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                className="w-full border border-border rounded-md px-3 py-2 text-sm"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Vai trò
-              </label>
-              <select
-                value={formData.roleId}
-                onChange={(e) => setFormData({ ...formData, roleId: e.target.value })}
-                className="w-full border border-border rounded-md px-3 py-2 text-sm"
-                required
-              >
-                <option value="">Chọn vai trò</option>
-                {roles.map((role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-foreground mb-1">
-                Phòng ban
-              </label>
-              <select
-                value={formData.departmentId}
-                onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                className="w-full border border-border rounded-md px-3 py-2 text-sm"
-                required
-              >
-                <option value="">Chọn phòng ban</option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="mt-4 flex gap-2">
-            <button
-              type="submit"
-              className="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-primary/90"
-            >
-              Tạo
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="bg-secondary text-secondary-foreground px-4 py-2 rounded-md text-sm font-medium hover:bg-secondary/90"
-            >
-              Hủy
-            </button>
-          </div>
-        </form>
+        <Card>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Auth User ID (từ Supabase)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.authUserId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, authUserId: e.target.value })
+                    }
+                    className={INPUT_CLASS}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Họ tên
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.fullName}
+                    onChange={(e) =>
+                      setFormData({ ...formData, fullName: e.target.value })
+                    }
+                    className={INPUT_CLASS}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Vai trò
+                  </label>
+                  <select
+                    value={formData.roleId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, roleId: e.target.value })
+                    }
+                    className={INPUT_CLASS}
+                    required
+                  >
+                    <option value="">Chọn vai trò</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium text-foreground">
+                    Phòng ban
+                  </label>
+                  <select
+                    value={formData.departmentId}
+                    onChange={(e) =>
+                      setFormData({ ...formData, departmentId: e.target.value })
+                    }
+                    className={INPUT_CLASS}
+                    required
+                  >
+                    <option value="">Chọn phòng ban</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>
+                        {dept.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" className="gap-1.5">
+                  <UserPlus className="h-4 w-4" />
+                  Tạo
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowForm(false)}
+                  className="gap-1.5"
+                >
+                  <X className="h-4 w-4" />
+                  Hủy
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="mt-6 rounded-lg border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted">
-              <th className="text-left p-3 font-medium text-muted-foreground">STT</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Họ tên</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Vai trò</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Phòng ban</th>
-              <th className="text-left p-3 font-medium text-muted-foreground">Trạng thái</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user, index) => (
-              <tr key={user.id} className="border-t border-border hover:bg-muted/50">
-                <td className="p-3">{index + 1}</td>
-                <td className="p-3">{user.fullName}</td>
-                <td className="p-3">
-                  <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                    {user.role.name}
-                  </span>
-                </td>
-                <td className="p-3">{user.department?.name || '—'}</td>
-                <td className="p-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                      user.isActive
-                        ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                        : "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
-                    }`}
-                  >
-                    {user.isActive ? "Đang hoạt động" : "Ngừng hoạt động"}
-                  </span>
-                </td>
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  STT
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Họ tên
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Vai trò
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Phòng ban
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Trạng thái
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {users.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-16 text-center text-muted-foreground"
+                  >
+                    <div className="flex flex-col items-center gap-2">
+                      <Users className="h-8 w-8 opacity-40" />
+                      <span className="text-sm">Không có dữ liệu</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                users.map((user, index) => {
+                  const isEven = index % 2 === 0;
+                  const roleBadge =
+                    ROLE_BADGE[user.role.name] || ROLE_BADGE.VIEWER;
+                  return (
+                    <tr
+                      key={user.id}
+                      className={cn(
+                        "border-b border-border/50 transition-colors hover:bg-muted/30",
+                        isEven ? "bg-card" : "bg-muted/10"
+                      )}
+                    >
+                      <td className="px-4 py-3 text-center text-muted-foreground">
+                        {index + 1}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium">{user.fullName}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            "inline-flex h-6 items-center justify-center rounded-full px-2.5 text-xs font-semibold ring-1",
+                            roleBadge
+                          )}
+                        >
+                          {user.role.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {user.department?.name || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center gap-1.5 text-sm">
+                          <span
+                            className={cn(
+                              "h-2 w-2 rounded-full",
+                              user.isActive ? "bg-emerald-500" : "bg-gray-400"
+                            )}
+                          />
+                          {user.isActive ? "Đang hoạt động" : "Ngừng hoạt động"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }
