@@ -121,10 +121,11 @@ export class DashboardService {
     const allTasks = await this.prisma.task.findMany({
       where: {
         isCancelled: false,
-        requiredCompletionDate: {
-          gte: startDate,
-          lte: endDate,
-        },
+        OR: [
+          { requiredCompletionDate: { gte: startDate, lte: endDate } },
+          { requiredCompletionDate: { gt: endDate } },
+          { requiredCompletionDate: null },
+        ],
       },
       select: {
         ownerDepartmentId: true,
@@ -153,30 +154,48 @@ export class DashboardService {
       });
 
       const total = enrichedTasks.length;
-      const completed = enrichedTasks.filter((t) =>
-        [
-          'COMPLETED',
-          'COMPLETED_EARLY',
-          'COMPLETED_ON_TIME',
-          'COMPLETED_LATE',
-        ].includes(t.status),
+      const completedOnTime = enrichedTasks.filter(
+        (t) =>
+          t.status === 'COMPLETED_EARLY' || t.status === 'COMPLETED_ON_TIME',
       ).length;
-      const inProgress = enrichedTasks.filter(
-        (t) => t.status === 'IN_PROGRESS',
-      ).length;
-      const overdue = enrichedTasks.filter(
+      const completedLate = enrichedTasks.filter(
         (t) => t.status === 'COMPLETED_LATE',
       ).length;
+      const now = new Date();
+      const inProgressOnTime = enrichedTasks.filter(
+        (t) =>
+          t.status === 'IN_PROGRESS' &&
+          t.requiredCompletionDate &&
+          t.requiredCompletionDate > now,
+      ).length;
+      const inProgressLate = enrichedTasks.filter(
+        (t) =>
+          t.status === 'IN_PROGRESS' &&
+          t.requiredCompletionDate &&
+          t.requiredCompletionDate <= now,
+      ).length;
+      const noEvaluation = enrichedTasks.filter(
+        (t) => t.status === 'NO_EVALUATION',
+      ).length;
+
+      const ratedTotal = completedOnTime + completedLate + inProgressOnTime + inProgressLate;
 
       return {
         departmentId: dept.id,
         departmentCode: dept.code,
         departmentName: dept.name,
         total,
-        completed,
-        inProgress,
-        overdue,
-        completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+        completedOnTime,
+        completedLate,
+        inProgressOnTime,
+        inProgressLate,
+        noEvaluation,
+        completionRate:
+          ratedTotal > 0
+            ? Math.round(
+                ((completedOnTime + completedLate) / ratedTotal) * 100,
+              )
+            : 0,
       };
     });
 
