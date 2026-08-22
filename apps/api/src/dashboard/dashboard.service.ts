@@ -121,11 +121,10 @@ export class DashboardService {
     const allTasks = await this.prisma.task.findMany({
       where: {
         isCancelled: false,
-        OR: [
-          { requiredCompletionDate: { gte: startDate, lte: endDate } },
-          { requiredCompletionDate: { gt: endDate } },
-          { requiredCompletionDate: null },
-        ],
+        requiredCompletionDate: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
       select: {
         ownerDepartmentId: true,
