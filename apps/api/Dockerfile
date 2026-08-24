@@ -1,16 +1,20 @@
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
 # Install dependencies only
 FROM base AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package-lock.json ./
 RUN npm ci
 
 # Build application
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY apps/api/package.json ./
+COPY apps/api/prisma ./prisma
+RUN npx prisma generate
+COPY apps/api/src ./src
+COPY apps/api/tsconfig.json apps/api/tsconfig.build.json apps/api/nest-cli.json ./
 RUN npm run build
 
 # Production image
@@ -30,4 +34,4 @@ USER nestjs
 
 EXPOSE 3001
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]

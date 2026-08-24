@@ -64,7 +64,7 @@ export function Sidebar() {
             <ClipboardCheck className="h-5 w-5 text-white" />
           </div>
           {!collapsed && (
-            <span className="font-bold text-foreground text-sm tracking-tight">Task Tracker</span>
+            <span className="font-bold text-foreground text-sm tracking-tight">Theo dõi nhiệm vụ</span>
           )}
         </Link>
       </div>
