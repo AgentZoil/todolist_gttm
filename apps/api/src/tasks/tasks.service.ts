@@ -49,6 +49,9 @@ export class TasksService {
       limit?: number;
       search?: string;
       status?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      assignedBy?: string;
       sortBy?: string;
       sortOrder?: 'asc' | 'desc';
     } = {},
@@ -59,6 +62,9 @@ export class TasksService {
       limit = 20,
       search,
       status,
+      dateFrom,
+      dateTo,
+      assignedBy,
       sortBy = 'requiredCompletionDate',
       sortOrder = 'asc',
     } = params;
@@ -76,12 +82,32 @@ export class TasksService {
       if (status === 'IN_PROGRESS') {
         where.isCancelled = false;
         where.actualCompletionDate = null;
-      } else if (status === 'COMPLETED') {
+        where.requiredCompletionDate = { not: null };
+      } else if (status === 'COMPLETED_EARLY' || status === 'COMPLETED_ON_TIME' || status === 'COMPLETED_LATE') {
         where.isCancelled = false;
         where.actualCompletionDate = { not: null };
+        where.requiredCompletionDate = { not: null };
+      } else if (status === 'NO_EVALUATION') {
+        where.isCancelled = false;
+        where.requiredCompletionDate = null;
       } else if (status === 'CANCELLED') {
         where.isCancelled = true;
       }
+    }
+    if (dateFrom || dateTo) {
+      const dateFilter: any = {};
+      if (dateFrom) {
+        const [year, month, day] = dateFrom.split('-').map(Number);
+        dateFilter.gte = new Date(year, month - 1, day, 0, 0, 0, 0);
+      }
+      if (dateTo) {
+        const [year, month, day] = dateTo.split('-').map(Number);
+        dateFilter.lte = new Date(year, month - 1, day, 23, 59, 59, 999);
+      }
+      where.assignedDate = dateFilter;
+    }
+    if (assignedBy) {
+      where.assignedBy = assignedBy;
     }
 
     const [tasks, total] = await Promise.all([
@@ -117,8 +143,22 @@ export class TasksService {
       this.prisma.task.count({ where }),
     ]);
 
+    let enrichedTasks = tasks.map((task) => this.enrichTask(task));
+
+    if (status === 'COMPLETED_EARLY' || status === 'COMPLETED_ON_TIME' || status === 'COMPLETED_LATE') {
+      enrichedTasks = enrichedTasks.filter((task) => {
+        if (!task.actualCompletionDate || !task.requiredCompletionDate) return false;
+        const actual = new Date(task.actualCompletionDate).getTime();
+        const required = new Date(task.requiredCompletionDate).getTime();
+        if (status === 'COMPLETED_EARLY') return actual < required;
+        if (status === 'COMPLETED_ON_TIME') return actual === required;
+        if (status === 'COMPLETED_LATE') return actual > required;
+        return true;
+      });
+    }
+
     return {
-      data: tasks.map((task) => this.enrichTask(task)),
+      data: enrichedTasks,
       pagination: {
         page,
         limit,
@@ -311,6 +351,12 @@ export class TasksService {
     if (actualCompletionDate && actualCompletionDate < assignedDate) {
       throw new ForbiddenException(
         'Ngày hoàn thành thực tế không được sớm hơn ngày giao nhiệm vụ',
+      );
+    }
+
+    if (actualCompletionDate && actualCompletionDate > new Date()) {
+      throw new ForbiddenException(
+        'Ngày hoàn thành thực tế không được lớn hơn ngày hiện tại',
       );
     }
 

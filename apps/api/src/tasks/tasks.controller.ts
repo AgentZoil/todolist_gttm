@@ -29,6 +29,9 @@ export class TasksController {
     @Query('limit') limit?: string,
     @Query('search') search?: string,
     @Query('status') status?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('assignedBy') assignedBy?: string,
     @Query('sortBy') sortBy?: string,
     @Query('sortOrder') sortOrder?: 'asc' | 'desc',
   ) {
@@ -38,6 +41,9 @@ export class TasksController {
       limit: limit ? parseInt(limit, 10) : 20,
       search,
       status,
+      dateFrom,
+      dateTo,
+      assignedBy,
       sortBy,
       sortOrder,
     });

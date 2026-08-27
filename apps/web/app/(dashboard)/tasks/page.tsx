@@ -20,6 +20,7 @@ import {
   Building2,
   Loader2,
   XCircle,
+  Calendar,
 } from "lucide-react";
 
 interface Department {
@@ -102,6 +103,13 @@ export default function TasksPage() {
   const [editFormData, setEditFormData] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
   const [filterDepartment, setFilterDepartment] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [showDatePopover, setShowDatePopover] = useState(false);
+  const [filterAssignedBy, setFilterAssignedBy] = useState("");
+  const [sortBy, setSortBy] = useState("");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<TabType>("in_progress");
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
@@ -129,14 +137,26 @@ export default function TasksPage() {
     deptId?: string;
     page?: number;
     search?: string;
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    assignedBy?: string;
+    sortBy?: string;
+    sortOrder?: string;
     isFilter?: boolean;
   } = {}) => {
-    const { deptId, page = 1, search, isFilter } = params;
+    const { deptId, page = 1, search, status, dateFrom, dateTo, assignedBy, sortBy: sb, sortOrder: so, isFilter } = params;
     if (isFilter) setFiltering(true);
     const queryParams = new URLSearchParams();
     if (deptId) queryParams.set("departmentId", deptId);
     if (page) queryParams.set("page", page.toString());
     if (search) queryParams.set("search", search);
+    if (status) queryParams.set("status", status);
+    if (dateFrom) queryParams.set("dateFrom", dateFrom);
+    if (dateTo) queryParams.set("dateTo", dateTo);
+    if (assignedBy) queryParams.set("assignedBy", assignedBy);
+    if (sb) queryParams.set("sortBy", sb);
+    if (so) queryParams.set("sortOrder", so);
     const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
     return apiFetch<{ data: Task[]; pagination: Pagination }>(`/tasks${query}`)
       .then((res) => {
@@ -173,16 +193,43 @@ export default function TasksPage() {
 
   const handleFilterChange = (deptId: string) => {
     setFilterDepartment(deptId);
-    fetchTasks({ deptId, page: 1, isFilter: true });
+    fetchTasks({ deptId, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, isFilter: true });
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+  };
+
+  const handleStatusFilter = (status: string) => {
+    setFilterStatus(status);
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+  };
+
+  const handleDateFromFilter = (dateFrom: string) => {
+    setFilterDateFrom(dateFrom);
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+  };
+
+  const handleDateToFilter = (dateTo: string) => {
+    setFilterDateTo(dateTo);
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+  };
+
+  const handleAssignedByFilter = (assignedBy: string) => {
+    setFilterAssignedBy(assignedBy);
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy, sortBy, sortOrder, isFilter: true });
+  };
+
+  const handleSort = (field: string) => {
+    const newOrder = sortBy === field && sortOrder === "asc" ? "desc" : "asc";
+    setSortBy(field);
+    setSortOrder(newOrder);
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy: field, sortOrder: newOrder, isFilter: true });
   };
 
   const handlePageChange = (newPage: number) => {
-    fetchTasks({ deptId: filterDepartment, page: newPage, search: searchQuery, isFilter: true });
+    fetchTasks({ deptId: filterDepartment, page: newPage, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -235,7 +282,7 @@ export default function TasksPage() {
     if (!confirm("Bạn có chắc chắn muốn hủy nhiệm vụ này?")) return;
     try {
       await apiFetch(`/tasks/${taskId}/cancel`, { method: "PATCH" });
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery });
+      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
     } catch (err: any) {
       setValidationMsg(err.message || "Lỗi hủy nhiệm vụ");
       setTimeout(() => setValidationMsg(null), 8000);
@@ -249,7 +296,7 @@ export default function TasksPage() {
       setDetailTask(null);
       setDeleteMsg("Xóa nhiệm vụ thành công");
       setTimeout(() => setDeleteMsg(null), 8000);
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery });
+      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
     } catch (err: any) {
       setDeleteMsg(err.message || "Xóa nhiệm vụ thất bại");
       setTimeout(() => setDeleteMsg(null), 8000);
@@ -290,6 +337,23 @@ export default function TasksPage() {
 
   const handleSaveDetail = async () => {
     if (!detailTask) return;
+    const requiredFields = [
+      { key: "title", label: "Tiêu đề nhiệm vụ" },
+      { key: "content", label: "Nội dung nhiệm vụ" },
+      { key: "source", label: "Nguồn giao NV" },
+      { key: "assignedBy", label: "Lãnh đạo giao NV" },
+      { key: "assignedDate", label: "Ngày giao NV" },
+      { key: "documentNumber", label: "Số/ký hiệu VB" },
+    ];
+    for (const field of requiredFields) {
+      const value = editFormData[field.key] ?? "";
+      if (!value.trim()) {
+        setValidationMsg(`${field.label} không được để trống`);
+        setTimeout(() => setValidationMsg(null), 8000);
+        setSavingEdit(false);
+        return;
+      }
+    }
     const assignedDate = editFormData.assignedDate || detailTask.assignedDate?.split("T")[0];
     if (assignedDate && editFormData.requiredCompletionDate) {
       if (new Date(editFormData.requiredCompletionDate) < new Date(assignedDate)) {
@@ -328,7 +392,8 @@ export default function TasksPage() {
       });
       setDetailTask(res.data);
       setEditingDetail(false);
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery });
+      setSelectedTask(null);
+      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
     } catch (err: any) {
       setValidationMsg("Lỗi lưu: " + err.message);
       setTimeout(() => setValidationMsg(null), 8000);
@@ -339,6 +404,11 @@ export default function TasksPage() {
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString("vi-VN");
+  };
+
+  const formatDateShort = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
   };
 
   const isInProgress = (task: Task) =>
@@ -434,12 +504,22 @@ export default function TasksPage() {
           <p className="text-sm text-muted-foreground mt-1">Quản lý nhiệm vụ theo phòng ban</p>
         </div>
         <div className="flex items-center gap-2.5">
+          <form onSubmit={handleSearch} className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Tìm nhiệm vụ..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 rounded-lg border border-border bg-card pl-9 pr-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors w-48 sm:w-64"
+            />
+          </form>
           <div className="relative">
             <select
               value={filterDepartment}
               onChange={(e) => handleFilterChange(e.target.value)}
               disabled={filtering}
-              className="h-9 rounded-lg border border-border bg-card px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors disabled:opacity-50"
+              className="h-9 rounded-lg border-2 border-primary/40 bg-accent/50 px-3 pr-8 text-sm font-medium text-primary shadow-sm ring-1 ring-primary/10 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
             >
               {departments.map((dept) => (
                 <option key={dept.id} value={dept.id}>{dept.name}</option>
@@ -460,10 +540,113 @@ export default function TasksPage() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2.5">
+        <select
+          value={filterStatus}
+          onChange={(e) => handleStatusFilter(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-card px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
+        >
+          <option value="">Tất cả trạng thái</option>
+          <option value="IN_PROGRESS">Đang thực hiện</option>
+          <option value="COMPLETED_EARLY">Hoàn thành trước hạn</option>
+          <option value="COMPLETED_ON_TIME">Hoàn thành đúng hạn</option>
+          <option value="COMPLETED_LATE">Hoàn thành quá hạn</option>
+          <option value="NO_EVALUATION">Không đánh giá</option>
+          <option value="CANCELLED">Đã hủy</option>
+        </select>
+        <select
+          value={filterAssignedBy}
+          onChange={(e) => handleAssignedByFilter(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-card px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
+        >
+          <option value="">Tất cả lãnh đạo</option>
+          <option value="Cục trưởng Bùi Quang Thái">Cục trưởng Bùi Quang Thái</option>
+          <option value="PCT Nguyễn Mạnh Thắng">PCT Nguyễn Mạnh Thắng</option>
+          <option value="PCT Nguyễn Viết Huy">PCT Nguyễn Viết Huy</option>
+          <option value="PCT Nguyễn Thanh Hoài">PCT Nguyễn Thanh Hoài</option>
+          <option value="PCT Nguyễn Thành Vinh">PCT Nguyễn Thành Vinh</option>
+          <option value="PCT Phan Thị Thu Hiền">PCT Phan Thị Thu Hiền</option>
+          <option value="PCT Ngô Lâm">PCT Ngô Lâm</option>
+          <option value="PBT Trần Hưng Hà">PBT Trần Hưng Hà</option>
+        </select>
+        <div className="relative">
+          <button
+            onClick={() => setShowDatePopover(!showDatePopover)}
+            className={cn(
+              "h-9 rounded-lg border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors flex items-center gap-2",
+              filterDateFrom || filterDateTo
+                ? "border-primary/40 text-primary font-medium"
+                : "border-border text-muted-foreground"
+            )}
+          >
+            <Calendar className="h-4 w-4" />
+            {filterDateFrom || filterDateTo ? (
+              <span>
+                {filterDateFrom ? formatDateShort(filterDateFrom) : "..."} - {filterDateTo ? formatDateShort(filterDateTo) : "..."}
+              </span>
+            ) : (
+              <span>Khoảng ngày</span>
+            )}
+          </button>
+          {showDatePopover && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowDatePopover(false)} />
+              <div className="absolute top-full left-0 mt-1 z-50 bg-card rounded-xl border border-border shadow-lg p-3 min-w-[260px]">
+                <div className="flex flex-col gap-2.5">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Từ ngày</label>
+                    <input
+                      type="date"
+                      value={filterDateFrom}
+                      onChange={(e) => handleDateFromFilter(e.target.value)}
+                      className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Đến ngày</label>
+                    <input
+                      type="date"
+                      value={filterDateTo}
+                      onChange={(e) => handleDateToFilter(e.target.value)}
+                      className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
+                    />
+                  </div>
+                  {(filterDateFrom || filterDateTo) && (
+                    <button
+                      onClick={() => {
+                        handleDateFromFilter("");
+                        handleDateToFilter("");
+                      }}
+                      className="h-7 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Xóa khoảng ngày
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        {(filterStatus || filterDateFrom || filterDateTo || filterAssignedBy) && (
+          <button
+            onClick={() => {
+              setFilterStatus("");
+              setFilterDateFrom("");
+              setFilterDateTo("");
+              setFilterAssignedBy("");
+              fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, isFilter: true });
+            }}
+            className="h-9 px-3 rounded-lg border border-border bg-card text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            Xóa bộ lọc
+          </button>
+        )}
+      </div>
+
       {canEditTasks && showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !submitting && setShowForm(false)} />
-          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-2xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
+          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <div className="flex items-center gap-2">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -482,7 +665,7 @@ export default function TasksPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Tiêu đề nhiệm vụ
+                    Tiêu đề nhiệm vụ <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
@@ -495,7 +678,7 @@ export default function TasksPage() {
                 </div>
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Nội dung nhiệm vụ
+                    Nội dung nhiệm vụ <span className="text-destructive">*</span>
                   </label>
                   <textarea
                     value={formData.content}
@@ -508,7 +691,7 @@ export default function TasksPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Nguồn giao NV
+                    Nguồn giao NV <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
@@ -520,7 +703,7 @@ export default function TasksPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Ngày giao NV
+                    Ngày giao NV <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="date"
@@ -532,7 +715,7 @@ export default function TasksPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Lãnh đạo giao NV
+                    Lãnh đạo giao NV <span className="text-destructive">*</span>
                   </label>
                   <select
                     value={formData.assignedBy}
@@ -543,7 +726,7 @@ export default function TasksPage() {
                     <option value="">Chọn lãnh đạo</option>
                     <option value="Cục trưởng Bùi Quang Thái">Cục trưởng Bùi Quang Thái</option>
                     <option value="PCT Nguyễn Mạnh Thắng">PCT Nguyễn Mạnh Thắng</option>
-                    <option value="PCT Nguyễn Việt Huy">PCT Nguyễn Việt Huy</option>
+                    <option value="PCT Nguyễn Viết Huy">PCT Nguyễn Viết Huy</option>
                     <option value="PCT Nguyễn Thanh Hoài">PCT Nguyễn Thanh Hoài</option>
                     <option value="PCT Nguyễn Thành Vinh">PCT Nguyễn Thành Vinh</option>
                     <option value="PCT Phan Thị Thu Hiền">PCT Phan Thị Thu Hiền</option>
@@ -553,7 +736,7 @@ export default function TasksPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Số/ký hiệu VB
+                    Số/ký hiệu VB <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
@@ -577,7 +760,7 @@ export default function TasksPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Đơn vị thực hiện
+                    Đơn vị thực hiện <span className="text-destructive">*</span>
                   </label>
                   {canChooseDepartment ? (
                     <select
@@ -646,7 +829,7 @@ export default function TasksPage() {
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }} />
-          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-5xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
+          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-5xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-semibold text-foreground">
                 {editingDetail ? "Chỉnh sửa nhiệm vụ" : "Chi tiết nhiệm vụ"}
@@ -743,7 +926,7 @@ export default function TasksPage() {
                     </div>
                     <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3">
                       <div>
-                        <label className="text-xs text-muted-foreground">Nguồn giao NV</label>
+                        <label className="text-xs text-muted-foreground">Nguồn giao NV <span className="text-destructive">*</span></label>
                         {editingDetail ? (
                           <input type="text" value={editFormData.source} onChange={(e) => setEditFormData({ ...editFormData, source: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
@@ -751,7 +934,7 @@ export default function TasksPage() {
                         )}
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Số/ký hiệu VB</label>
+                        <label className="text-xs text-muted-foreground">Số/ký hiệu VB <span className="text-destructive">*</span></label>
                         {editingDetail ? (
                           <input type="text" value={editFormData.documentNumber} onChange={(e) => setEditFormData({ ...editFormData, documentNumber: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
@@ -759,13 +942,13 @@ export default function TasksPage() {
                         )}
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Lãnh đạo giao NV</label>
+                        <label className="text-xs text-muted-foreground">Lãnh đạo giao NV <span className="text-destructive">*</span></label>
                         {editingDetail ? (
                           <select value={editFormData.assignedBy} onChange={(e) => setEditFormData({ ...editFormData, assignedBy: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1">
                             <option value="">Chọn lãnh đạo</option>
                             <option value="Cục trưởng Bùi Quang Thái">Cục trưởng Bùi Quang Thái</option>
                             <option value="PCT Nguyễn Mạnh Thắng">PCT Nguyễn Mạnh Thắng</option>
-                            <option value="PCT Nguyễn Việt Huy">PCT Nguyễn Việt Huy</option>
+                            <option value="PCT Nguyễn Viết Huy">PCT Nguyễn Viết Huy</option>
                             <option value="PCT Nguyễn Thanh Hoài">PCT Nguyễn Thanh Hoài</option>
                             <option value="PCT Nguyễn Thành Vinh">PCT Nguyễn Thành Vinh</option>
                             <option value="PCT Phan Thị Thu Hiền">PCT Phan Thị Thu Hiền</option>
@@ -777,7 +960,7 @@ export default function TasksPage() {
                         )}
                       </div>
                       <div>
-                        <label className="text-xs text-muted-foreground">Ngày giao NV</label>
+                        <label className="text-xs text-muted-foreground">Ngày giao NV <span className="text-destructive">*</span></label>
                         {editingDetail ? (
                           <input type="date" value={editFormData.assignedDate} onChange={(e) => setEditFormData({ ...editFormData, assignedDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
@@ -785,7 +968,7 @@ export default function TasksPage() {
                         )}
                       </div>
                       <div className="col-span-2">
-                        <label className="text-xs text-muted-foreground">Nội dung nhiệm vụ</label>
+                        <label className="text-xs text-muted-foreground">Nội dung nhiệm vụ <span className="text-destructive">*</span></label>
                         {editingDetail ? (
                           <textarea value={editFormData.content} onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })} rows={3} className="min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
@@ -802,7 +985,7 @@ export default function TasksPage() {
                     </div>
                     <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3">
                       <div>
-                        <label className="text-xs text-muted-foreground">Đơn vị thực hiện</label>
+                        <label className="text-xs text-muted-foreground">Đơn vị thực hiện <span className="text-destructive">*</span></label>
                         <p className="text-sm font-medium text-foreground mt-0.5 flex items-center gap-1.5">
                           <svg className="w-3.5 h-3.5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                           {detailTask.ownerDepartment.name}
@@ -836,7 +1019,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày hoàn thành thực tế</label>
                         {editingDetail ? (
-                          <input type="date" value={editFormData.actualCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, actualCompletionDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
+                          <input type="date" max={new Date().toISOString().split("T")[0]} value={editFormData.actualCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, actualCompletionDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.actualCompletionDate ? formatDate(detailTask.actualCompletionDate) : "—"}</p>
                         )}
@@ -878,16 +1061,31 @@ export default function TasksPage() {
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm table-fixed">
+            <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">STT</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tiêu đề</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[260px]">Lãnh đạo giao NV</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[180px]">Ngày giao NV</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[180px]">Ngày YC HT</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[170px]">Ngày HT thực tế</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap w-[200px]">Tình trạng</th>
+                  <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">STT</th>
+                  <th className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-2/5">Tiêu đề</th>
+                  <th className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Lãnh đạo</th>
+                  <th
+                    className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                    onClick={() => handleSort("assignedDate")}
+                  >
+                    Ngày giao {sortBy === "assignedDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                  </th>
+                  <th
+                    className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                    onClick={() => handleSort("requiredCompletionDate")}
+                  >
+                    YC hoàn thành {sortBy === "requiredCompletionDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                  </th>
+                  <th
+                    className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                    onClick={() => handleSort("actualCompletionDate")}
+                  >
+                    HT thực tế {sortBy === "actualCompletionDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                  </th>
+                  <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Trạng thái</th>
                 </tr>
               </thead>
               <tbody>
@@ -904,23 +1102,23 @@ export default function TasksPage() {
                       className={cn("border-b border-border/50 transition-colors hover:bg-muted/30 cursor-pointer", index % 2 === 0 ? "bg-card" : "bg-muted/10")}
                       onClick={() => handleViewDetail(task)}
                     >
-                      <td className="px-3 py-2 text-center text-muted-foreground">{index + 1}</td>
-                      <td className="px-3 py-2 max-w-0">
-                        <div className="font-medium truncate">{task.title}</div>
+                      <td className="px-2 py-2 text-center text-muted-foreground">{index + 1}</td>
+                      <td className="px-2 py-2">
+                        <div className="font-medium line-clamp-2 min-w-0">{task.title}</div>
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">{task.assignedBy}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{formatDate(task.assignedDate)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">{task.assignedBy}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">{formatDate(task.assignedDate)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
                         {task.requiredCompletionDate
                           ? formatDate(task.requiredCompletionDate)
                           : "—"}
                       </td>
-                      <td className="px-3 py-2 whitespace-nowrap">
+                      <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
                         {task.actualCompletionDate
                           ? formatDate(task.actualCompletionDate)
                           : "—"}
                       </td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-2 py-2 text-center">
                         <span
                           className={cn("inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-semibold ring-1", STATUS_COLORS[task.status] || "bg-gray-100 text-gray-600")}
                         >
