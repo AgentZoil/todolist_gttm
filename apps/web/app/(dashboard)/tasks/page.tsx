@@ -607,6 +607,7 @@ export default function TasksPage() {
                     <input
                       type="date"
                       value={filterDateTo}
+                      min={filterDateFrom || undefined}
                       onChange={(e) => handleDateToFilter(e.target.value)}
                       className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     />

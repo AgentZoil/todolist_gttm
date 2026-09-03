@@ -43,9 +43,11 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [formData, setFormData] = useState({
-    authUserId: "",
+    email: "",
     fullName: "",
+    password: "",
     roleId: "",
     departmentId: "",
   });
@@ -57,6 +59,7 @@ export default function UsersPage() {
           router.replace("/dashboard");
           return;
         }
+        setIsAdmin(res.data.role === "ADMIN");
         return Promise.all([
           apiFetch<{ data: User[] }>("/users"),
           apiFetch<{ data: Role[] }>("/auth/roles"),
@@ -82,7 +85,7 @@ export default function UsersPage() {
         body: JSON.stringify(formData),
       });
       setShowForm(false);
-      setFormData({ authUserId: "", fullName: "", roleId: "", departmentId: "" });
+      setFormData({ email: "", fullName: "", password: "", roleId: "", departmentId: "" });
       const res = await apiFetch<{ data: User[] }>("/users");
       setUsers(res.data);
     } catch (err: any) {
@@ -126,91 +129,115 @@ export default function UsersPage() {
             Quản lý {users.length} người dùng
           </p>
         </div>
-        <Button
-          onClick={() => setShowForm(!showForm)}
-          variant={showForm ? "outline" : "default"}
-          className="gap-1.5"
-        >
-          {showForm ? (
-            <>
-              <X className="h-4 w-4" />
-              Đóng
-            </>
-          ) : (
-            <>
-              <UserPlus className="h-4 w-4" />
-              Thêm người dùng
-            </>
-          )}
-        </Button>
+        {isAdmin && (
+          <Button
+            onClick={() => setShowForm(!showForm)}
+            variant={showForm ? "outline" : "default"}
+            className="gap-1.5"
+          >
+            {showForm ? (
+              <>
+                <X className="h-4 w-4" />
+                Đóng
+              </>
+            ) : (
+              <>
+                <UserPlus className="h-4 w-4" />
+                Thêm người dùng
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {showForm && (
-        <Card>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                    Auth User ID (từ Supabase)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.authUserId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, authUserId: e.target.value })
-                    }
-                    className={INPUT_CLASS}
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                    Họ tên
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.fullName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, fullName: e.target.value })
-                    }
-                    className={INPUT_CLASS}
-                    required
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                    Vai trò
-                  </label>
-                  <select
-                    value={formData.roleId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, roleId: e.target.value })
-                    }
-                    className={INPUT_CLASS}
-                    required
-                  >
-                    <option value="">Chọn vai trò</option>
-                    {roles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-foreground">
-                    Phòng ban
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowForm(false)} />
+          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-lg mx-4 ring-1 ring-foreground/5">
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                  <UserPlus className="h-4 w-4 text-primary" />
+                </span>
+                <h2 className="text-lg font-semibold text-foreground">Thêm người dùng mới</h2>
+              </div>
+              <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-4 space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  Họ và tên <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.fullName}
+                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  className={INPUT_CLASS}
+                  placeholder="Nguyễn Văn A"
+                  required
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  Email <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className={INPUT_CLASS}
+                  placeholder="nguyenvana@example.com"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Hệ thống sẽ tự tạo tài khoản đăng nhập cho người dùng này</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  Mật khẩu <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className={INPUT_CLASS}
+                  placeholder="Tối thiểu 6 ký tự"
+                  minLength={6}
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Chia sẻ mật khẩu này cho người dùng để đăng nhập lần đầu</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">
+                  Vai trò <span className="text-destructive">*</span>
+                </label>
+                <select
+                  value={formData.roleId}
+                  onChange={(e) => setFormData({ ...formData, roleId: e.target.value, departmentId: "" })}
+                  className={INPUT_CLASS}
+                  required
+                >
+                  <option value="">-- Chọn vai trò --</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {roles.find((r) => r.id === formData.roleId)?.name === "DEPARTMENT_EDITOR" && (
+                <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200 fill-mode-both">
+                  <label className="block text-sm font-medium text-foreground">
+                    Phòng ban <span className="text-destructive">*</span>
                   </label>
                   <select
                     value={formData.departmentId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, departmentId: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
                     className={INPUT_CLASS}
                     required
                   >
-                    <option value="">Chọn phòng ban</option>
+                    <option value="">-- Chọn phòng ban --</option>
                     {departments.map((dept) => (
                       <option key={dept.id} value={dept.id}>
                         {dept.name}
@@ -218,11 +245,11 @@ export default function UsersPage() {
                     ))}
                   </select>
                 </div>
-              </div>
-              <div className="flex gap-2">
+              )}
+              <div className="flex gap-2 pt-2">
                 <Button type="submit" className="gap-1.5">
                   <UserPlus className="h-4 w-4" />
-                  Tạo
+                  Tạo người dùng
                 </Button>
                 <Button
                   type="button"
@@ -230,13 +257,12 @@ export default function UsersPage() {
                   onClick={() => setShowForm(false)}
                   className="gap-1.5"
                 >
-                  <X className="h-4 w-4" />
                   Hủy
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       )}
 
       <Card>

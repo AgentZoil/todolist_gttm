@@ -20,10 +20,11 @@ export class UsersController {
   async create(
     @Body()
     body: {
-      authUserId: string;
+      email: string;
       fullName: string;
+      password: string;
       roleId: string;
-      departmentId: string;
+      departmentId?: string;
     },
   ) {
     const user = await this.usersService.create(body);

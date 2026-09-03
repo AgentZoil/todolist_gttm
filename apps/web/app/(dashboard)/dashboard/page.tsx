@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/card";
+import { DepartmentStatusChart } from "@/components/dashboard/department-status-chart";
 import {
   ClipboardList,
   CheckCircle2,
@@ -71,10 +71,7 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
-          <span className="text-sm text-muted-foreground">Đang tải dữ liệu...</span>
-        </div>
+        <span className="text-sm text-muted-foreground">Đang tải dữ liệu...</span>
       </div>
     );
   }
@@ -82,12 +79,14 @@ export default function DashboardPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="max-w-sm w-full">
-          <CardContent className="flex flex-col items-center gap-3 py-8">
-            <AlertTriangle className="h-10 w-10 text-destructive" />
-            <p className="text-destructive font-medium">Lỗi: {error}</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+              <AlertTriangle className="h-6 w-6 text-destructive" />
+            </div>
+            <p className="font-medium text-destructive">Lỗi: {error}</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -97,58 +96,66 @@ export default function DashboardPage() {
       label: "Tổng nhiệm vụ",
       value: totals.total,
       icon: ClipboardList,
-      color: "text-primary",
-      bg: "bg-primary/10",
-      ring: "ring-primary/20",
+      gradient: "from-primary/20 to-primary/5",
+      iconBg: "bg-primary/10",
+      iconColor: "text-primary",
+      glowColor: "hover:shadow-primary/20",
     },
     {
       label: "Hoàn thành đúng hạn",
       value: totals.completedOnTime,
       icon: CheckCircle2,
-      color: "text-emerald-600",
-      bg: "bg-emerald-50",
-      ring: "ring-emerald-200",
+      gradient: "from-emerald-500/20 to-emerald-500/5",
+      iconBg: "bg-emerald-500/10",
+      iconColor: "text-emerald-500",
+      glowColor: "hover:shadow-emerald-500/20",
     },
     {
       label: "Hoàn thành quá hạn",
       value: totals.completedLate,
       icon: Clock,
-      color: "text-orange-500",
-      bg: "bg-orange-50",
-      ring: "ring-orange-200",
+      gradient: "from-orange-500/20 to-orange-500/5",
+      iconBg: "bg-orange-500/10",
+      iconColor: "text-orange-500",
+      glowColor: "hover:shadow-orange-500/20",
     },
     {
-      label: "Chưa hoàn thành - còn hạn",
+      label: "Đang thực hiện",
       value: totals.inProgressOnTime,
       icon: TrendingUp,
-      color: "text-blue-600",
-      bg: "bg-blue-50",
-      ring: "ring-blue-200",
+      gradient: "from-blue-500/20 to-blue-500/5",
+      iconBg: "bg-blue-500/10",
+      iconColor: "text-blue-500",
+      glowColor: "hover:shadow-blue-500/20",
     },
     {
-      label: "Chưa hoàn thành - quá hạn",
+      label: "Quá hạn",
       value: totals.inProgressLate,
       icon: CalendarX,
-      color: "text-red-500",
-      bg: "bg-red-50",
-      ring: "ring-red-200",
+      gradient: "from-red-500/20 to-red-500/5",
+      iconBg: "bg-red-500/10",
+      iconColor: "text-red-500",
+      glowColor: "hover:shadow-red-500/20",
     },
     {
-      label: "Không đánh giá",
+      label: "Chưa đánh giá",
       value: totals.noEvaluation,
       icon: ClipboardList,
-      color: "text-muted-foreground",
-      bg: "bg-muted",
-      ring: "ring-border",
+      gradient: "from-muted-foreground/20 to-muted-foreground/5",
+      iconBg: "bg-muted",
+      iconColor: "text-muted-foreground",
+      glowColor: "hover:shadow-muted-foreground/10",
     },
   ];
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">BẢNG TỔNG HỢP ĐÁNH GIÁ HOÀN THÀNH NHIỆM VỤ</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground lg:text-3xl">
+            Bảng tổng hợp đánh giá
+          </h1>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -156,8 +163,42 @@ export default function DashboardPage() {
               type="month"
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
-              className="h-9 rounded-lg border border-border bg-card px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
+              className="h-10 rounded-xl border border-border/60 bg-card/80 px-4 text-sm font-medium shadow-sm ring-1 ring-foreground/5 backdrop-blur-sm transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:shadow-lg focus:shadow-primary/10"
             />
+          </div>
+        </div>
+      </div>
+
+      {/* Completion Rate Hero */}
+      <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-gradient-to-br from-primary via-primary to-secondary p-6 shadow-xl shadow-primary/10">
+        <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-secondary/20 blur-3xl" />
+        <div className="relative z-10">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-primary-foreground/80">Tỷ lệ hoàn thành tháng này</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-5xl font-bold tabular-nums text-primary-foreground">{totals.completionRate}%</p>
+                <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-medium text-primary-foreground backdrop-blur-sm">
+                  {monthName}
+                </span>
+              </div>
+            </div>
+            <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm ring-1 ring-white/20">
+              <TrendingUp className="h-10 w-10 text-primary-foreground" />
+            </div>
+          </div>
+          <div className="mt-6 space-y-2">
+            <div className="flex items-center justify-between text-xs text-primary-foreground/70">
+              <span>Tiến độ</span>
+              <span>{totals.completionRate}%</span>
+            </div>
+            <div className="h-3 overflow-hidden rounded-full bg-white/20">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-white/90 to-white/60 transition-all duration-1000 ease-out"
+                style={{ width: `${totals.completionRate}%` }}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -165,73 +206,57 @@ export default function DashboardPage() {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {statCards.map((s) => (
-          <Card key={s.label} className="relative overflow-hidden">
-            <CardContent className="py-4">
+          <div
+            key={s.label}
+            className={`group relative overflow-hidden rounded-xl border border-border/40 bg-gradient-to-br ${s.gradient} p-4 backdrop-blur-sm transition-all duration-300 hover:border-border/60 hover:shadow-lg ${s.glowColor} cursor-default`}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-card/50 to-card/80" />
+            <div className="relative z-10">
               <div className="flex items-center justify-between">
-                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ring-1 ${s.bg} ${s.ring}`}>
-                  <s.icon className={`h-4.5 w-4.5 ${s.color}`} />
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${s.iconBg} ring-1 ring-black/5 transition-transform duration-300 group-hover:scale-110`}>
+                  <s.icon className={`h-5 w-5 ${s.iconColor}`} />
                 </div>
-                <span className={`text-2xl font-bold tabular-nums ${s.color}`}>
+                <span className={`text-2xl font-bold tabular-nums ${s.iconColor}`}>
                   {s.value}
                 </span>
               </div>
-              <p className="mt-2.5 text-xs font-medium text-muted-foreground leading-tight">
+              <p className="mt-3 text-xs font-medium text-muted-foreground leading-tight">
                 {s.label}
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         ))}
       </div>
 
-      {/* Completion Rate */}
-      <Card className="overflow-hidden border-0 bg-gradient-to-br from-primary via-primary to-secondary shadow-lg shadow-primary/10">
-        <CardContent className="py-5">
-          <div className="flex items-center justify-between text-primary-foreground">
-            <div>
-              <p className="text-sm font-medium opacity-80">Tỷ lệ hoàn thành</p>
-              <p className="mt-1 text-4xl font-bold tabular-nums">{totals.completionRate}%</p>
-            </div>
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm">
-              <TrendingUp className="h-8 w-8" />
-            </div>
-          </div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/20">
-            <div
-              className="h-full rounded-full bg-white transition-all duration-700 ease-out"
-              style={{ width: `${totals.completionRate}%` }}
-            />
-          </div>
-          <div className="mt-2 flex justify-between text-xs opacity-70">
-            <span>0%</span>
-            <span>100%</span>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Department Status Chart */}
+      {departments.length > 0 && <DepartmentStatusChart data={departments} />}
 
       {/* Department Table */}
-      <Card>
+      <div className="overflow-hidden rounded-2xl border border-border/40 bg-card/80 shadow-sm backdrop-blur-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">STT</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phòng ban</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tổng NV</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-emerald-600">Đúng hạn</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-orange-500">Quá hạn</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-blue-600">Còn hạn</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-red-500">Hết hạn</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Không ĐG</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tỷ lệ</th>
+              <tr className="border-b border-border/60 bg-muted/30">
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">STT</th>
+                <th className="px-4 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phòng ban</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tổng NV</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-emerald-500">Hoàn thành trước hạn</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-orange-500">Hoàn thành quá hạn</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-blue-500">Đang thực hiện</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-red-500">Không hoàn thành</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Không đánh giá</th>
+                <th className="px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tỷ lệ</th>
               </tr>
             </thead>
             <tbody>
               {departments.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center text-muted-foreground">
-                    <div className="flex flex-col items-center gap-2">
-                      <ClipboardList className="h-8 w-8 opacity-40" />
-                      <span className="text-sm">Không có dữ liệu</span>
+                  <td colSpan={9} className="px-4 py-20 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/50">
+                        <ClipboardList className="h-7 w-7 opacity-40" />
+                      </div>
+                      <span className="text-sm font-medium">Không có dữ liệu</span>
                     </div>
                   </td>
                 </tr>
@@ -241,45 +266,45 @@ export default function DashboardPage() {
                   return (
                     <tr
                       key={dept.departmentId}
-                      className={`border-b border-border/50 transition-colors hover:bg-muted/30 ${
+                      className={`border-b border-border/30 transition-all duration-200 hover:bg-muted/20 ${
                         isEven ? "bg-card" : "bg-muted/10"
                       }`}
                     >
-                      <td className="px-4 py-3 text-center text-muted-foreground">
+                      <td className="px-4 py-3.5 text-center text-muted-foreground tabular-nums">
                         {index + 1}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium">{dept.departmentName}</span>
+                      <td className="px-4 py-3.5">
+                        <span className="font-medium text-foreground">{dept.departmentName}</span>
                       </td>
-                      <td className="px-4 py-3 text-center font-semibold">{dept.total}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-emerald-50 px-2 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                      <td className="px-4 py-3.5 text-center font-semibold text-foreground tabular-nums">{dept.total}</td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-emerald-500/10 px-2.5 text-xs font-semibold text-emerald-500 ring-1 ring-emerald-500/20">
                           {dept.completedOnTime}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-orange-50 px-2 text-xs font-semibold text-orange-600 ring-1 ring-orange-200">
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-orange-500/10 px-2.5 text-xs font-semibold text-orange-500 ring-1 ring-orange-500/20">
                           {dept.completedLate}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-blue-50 px-2 text-xs font-semibold text-blue-600 ring-1 ring-blue-200">
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-blue-500/10 px-2.5 text-xs font-semibold text-blue-500 ring-1 ring-blue-500/20">
                           {dept.inProgressOnTime}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-50 px-2 text-xs font-semibold text-red-500 ring-1 ring-red-200">
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-red-500/10 px-2.5 text-xs font-semibold text-red-500 ring-1 ring-red-500/20">
                           {dept.inProgressLate}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-muted px-2 text-xs font-semibold text-muted-foreground ring-1 ring-border">
+                      <td className="px-4 py-3.5 text-center">
+                        <span className="inline-flex h-7 min-w-[28px] items-center justify-center rounded-full bg-muted/80 px-2.5 text-xs font-semibold text-muted-foreground ring-1 ring-border/60">
                           {dept.noEvaluation}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-4 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-2">
-                          <div className="h-1.5 w-12 overflow-hidden rounded-full bg-muted">
+                          <div className="h-1.5 w-14 overflow-hidden rounded-full bg-muted/80">
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${
                                 dept.completionRate >= 80
@@ -291,7 +316,15 @@ export default function DashboardPage() {
                               style={{ width: `${dept.completionRate}%` }}
                             />
                           </div>
-                          <span className="text-xs font-semibold tabular-nums">{dept.completionRate}%</span>
+                          <span className={`text-xs font-semibold tabular-nums ${
+                            dept.completionRate >= 80
+                              ? "text-emerald-500"
+                              : dept.completionRate >= 50
+                              ? "text-amber-500"
+                              : "text-red-500"
+                          }`}>
+                            {dept.completionRate}%
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -301,7 +334,7 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
-      </Card>
+      </div>
     </div>
   );
 }
