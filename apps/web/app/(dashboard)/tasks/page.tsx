@@ -1034,7 +1034,7 @@ export default function TasksPage() {
                         {editingDetail ? (
                           <textarea value={editFormData.content} onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })} rows={3} className="min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
-                          <p className="text-sm text-foreground mt-0.5 leading-relaxed">{detailTask.content}</p>
+                          <p className="text-sm text-foreground mt-0.5 leading-relaxed whitespace-pre-wrap">{detailTask.content}</p>
                         )}
                       </div>
                     </div>
@@ -1091,7 +1091,7 @@ export default function TasksPage() {
                         {editingDetail ? (
                           <textarea value={editFormData.completionEvidence} onChange={(e) => setEditFormData({ ...editFormData, completionEvidence: e.target.value })} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
-                          <p className="text-sm text-foreground mt-0.5">{detailTask.completionEvidence || "—"}</p>
+                          <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{detailTask.completionEvidence || "—"}</p>
                         )}
                       </div>
                       <div className="col-span-2">
@@ -1099,7 +1099,7 @@ export default function TasksPage() {
                         {editingDetail ? (
                           <textarea value={editFormData.incompleteReason} onChange={(e) => setEditFormData({ ...editFormData, incompleteReason: e.target.value })} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
-                          <p className="text-sm text-foreground mt-0.5">{detailTask.incompleteReason || "—"}</p>
+                          <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{detailTask.incompleteReason || "—"}</p>
                         )}
                       </div>
                     </div>

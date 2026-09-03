@@ -39,3 +39,14 @@ coverage/
 
 # Memory & State
 memory-state.md
+
+# Prisma
+apps/api/prisma/data/*.csv
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
