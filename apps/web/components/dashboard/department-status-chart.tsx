@@ -8,8 +8,8 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
-  LabelList,
   CartesianGrid,
+  LabelList,
 } from "recharts";
 import { BarChart3 } from "lucide-react";
 
@@ -186,11 +186,11 @@ export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
               radius={i === STATUS_CONFIG.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
             >
               <LabelList
-                position="inside"
+                position="insideRight"
                 fill="#fff"
                 fontSize={11}
                 fontWeight={600}
-                formatter={(v) => (Number(v) > 0 ? v : "")}
+                offset={4}
               />
             </Bar>
           ))}
