@@ -35,6 +35,13 @@ const ROLE_BADGE: Record<string, string> = {
   VIEWER: "bg-muted text-muted-foreground ring-border",
 };
 
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin",
+  SECRETARY: "Thư ký",
+  DEPARTMENT_EDITOR: "Phụ trách phòng ban",
+  VIEWER: "Người xem",
+};
+
 export default function UsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
@@ -221,7 +228,7 @@ export default function UsersPage() {
                   <option value="">-- Chọn vai trò --</option>
                   {roles.map((role) => (
                     <option key={role.id} value={role.id}>
-                      {role.name}
+                      {ROLE_LABEL[role.name] || role.name}
                     </option>
                   ))}
                 </select>
@@ -326,7 +333,7 @@ export default function UsersPage() {
                             roleBadge
                           )}
                         >
-                          {user.role.name}
+                          {ROLE_LABEL[user.role.name] || user.role.name}
                         </span>
                       </td>
                       <td className="px-4 py-3">

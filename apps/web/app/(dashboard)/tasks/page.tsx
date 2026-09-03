@@ -21,6 +21,8 @@ import {
   Loader2,
   XCircle,
   Calendar,
+  Lock,
+  Unlock,
 } from "lucide-react";
 
 interface Department {
@@ -285,6 +287,34 @@ export default function TasksPage() {
       await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
     } catch (err: any) {
       setValidationMsg(err.message || "Lỗi hủy nhiệm vụ");
+      setTimeout(() => setValidationMsg(null), 8000);
+    }
+  };
+
+  const handleFinalize = async (taskId: string) => {
+    if (!confirm("Bạn có chắc chắn muốn chốt nhiệm vụ này?")) return;
+    try {
+      await apiFetch(`/tasks/${taskId}/finalize`, { method: "PATCH" });
+      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
+      if (detailTask?.id === taskId) {
+        setDetailTask({ ...detailTask, isFinalized: true });
+      }
+    } catch (err: any) {
+      setValidationMsg(err.message || "Lỗi chốt nhiệm vụ");
+      setTimeout(() => setValidationMsg(null), 8000);
+    }
+  };
+
+  const handleUnfinalize = async (taskId: string) => {
+    if (!confirm("Bạn có chắc chắn muốn mở chốt nhiệm vụ này?")) return;
+    try {
+      await apiFetch(`/tasks/${taskId}/unfinalize`, { method: "PATCH" });
+      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
+      if (detailTask?.id === taskId) {
+        setDetailTask({ ...detailTask, isFinalized: false });
+      }
+    } catch (err: any) {
+      setValidationMsg(err.message || "Lỗi mở chốt nhiệm vụ");
       setTimeout(() => setValidationMsg(null), 8000);
     }
   };
@@ -878,6 +908,29 @@ export default function TasksPage() {
                         Xóa
                       </Button>
                     )}
+                    {canEditDetail && !detailTask?.isCancelled && (
+                      <>
+                        {detailTask?.isFinalized ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleUnfinalize(detailTask!.id)}
+                          >
+                            <Unlock className="h-3.5 w-3.5" />
+                            Mở chốt
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleFinalize(detailTask!.id)}
+                          >
+                            <Lock className="h-3.5 w-3.5" />
+                            Chốt
+                          </Button>
+                        )}
+                      </>
+                    )}
                     <button
                       onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }}
                       className="text-muted-foreground hover:text-foreground"
@@ -914,9 +967,17 @@ export default function TasksPage() {
                       </p>
                     </div>
                     {!editingDetail && (
-                      <span className={`shrink-0 inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${STATUS_COLORS[detailTask.status] || "bg-gray-100 text-gray-600"}`}>
-                        {detailTask.statusLabel}
-                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {detailTask.isFinalized && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                            <Lock className="h-3 w-3" />
+                            Đã chốt
+                          </span>
+                        )}
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${STATUS_COLORS[detailTask.status] || "bg-gray-100 text-gray-600"}`}>
+                          {detailTask.statusLabel}
+                        </span>
+                      </div>
                     )}
                   </div>
 

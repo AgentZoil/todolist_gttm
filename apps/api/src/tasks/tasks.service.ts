@@ -240,7 +240,7 @@ export class TasksService {
 
     const taskCode = `NV-${Date.now()}`;
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         taskCode,
         title: data.title,
@@ -260,6 +260,15 @@ export class TasksService {
         ownerDepartment: true,
       },
     });
+
+    await this.auditLogService.log({
+      userId: data.createdBy,
+      action: 'CREATE',
+      entityType: 'TASK',
+      entityId: task.id,
+    });
+
+    return task;
   }
 
   private async checkEditPermissions(

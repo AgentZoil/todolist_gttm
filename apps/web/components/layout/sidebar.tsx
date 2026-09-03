@@ -10,6 +10,7 @@ import {
   Users,
   ScrollText,
   ClipboardCheck,
+  Lock,
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react";
@@ -21,11 +22,12 @@ interface UserInfo {
 }
 
 const allNavItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
   { label: "Nhiệm vụ", href: "/tasks", icon: ListTodo },
   { label: "Phòng ban", href: "/departments", icon: Building2 },
   { label: "Người dùng", href: "/users", icon: Users, roles: ["ADMIN", "SECRETARY"] },
-  { label: "Audit Log", href: "/audit-logs", icon: ScrollText, roles: ["ADMIN"] },
+  { label: "Khóa tháng", href: "/period-locks", icon: Lock, roles: ["ADMIN"] },
+  { label: "Nhật ký hoạt động", href: "/audit-logs", icon: ScrollText, roles: ["ADMIN"] },
 ];
 
 export function Sidebar() {

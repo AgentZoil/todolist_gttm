@@ -79,7 +79,7 @@ export default function DepartmentsPage() {
                     <XCircle className="h-4 w-4 text-muted-foreground" />
                   )}
                   <span className={`text-xs font-medium ${dept.isActive ? "text-emerald-600" : "text-muted-foreground"}`}>
-                    {dept.isActive ? "Active" : "Inactive"}
+                    {dept.isActive ? "Đang hoạt động" : "Ngừng hoạt động"}
                   </span>
                 </div>
               </div>

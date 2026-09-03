@@ -26,18 +26,36 @@ interface AuditLog {
   user: { id: string; fullName: string };
 }
 
-const ACTION_STYLE: Record<string, { badge: string; icon: React.ElementType }> = {
+const ACTION_STYLE: Record<string, { badge: string; icon: React.ElementType; label: string }> = {
   CREATE: {
     badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
     icon: PlusCircle,
+    label: "Tạo mới",
   },
   UPDATE: {
     badge: "bg-blue-50 text-blue-700 ring-blue-200",
     icon: Edit3,
+    label: "Chỉnh sửa",
   },
   DELETE: {
     badge: "bg-red-50 text-red-600 ring-red-200",
     icon: Trash2,
+    label: "Xóa",
+  },
+  CANCEL: {
+    badge: "bg-orange-50 text-orange-600 ring-orange-200",
+    icon: Trash2,
+    label: "Hủy",
+  },
+  FINALIZE: {
+    badge: "bg-amber-50 text-amber-700 ring-amber-200",
+    icon: Edit3,
+    label: "Chốt",
+  },
+  UNFINALIZE: {
+    badge: "bg-purple-50 text-purple-700 ring-purple-200",
+    icon: Edit3,
+    label: "Mở chốt",
   },
 };
 
@@ -96,7 +114,7 @@ export default function AuditLogsPage() {
       <div>
         <div className="flex items-center gap-2.5">
           <ScrollText className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Nhật ký hoạt động</h1>
           <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary ring-1 ring-primary/20">
             {logs.length}
           </span>
@@ -182,7 +200,7 @@ export default function AuditLogsPage() {
                           )}
                         >
                           <ActionIcon className="h-3 w-3" />
-                          {log.action}
+                          {style?.label || log.action}
                         </span>
                       </td>
                       <td className="px-4 py-3">
