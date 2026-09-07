@@ -1,5 +1,6 @@
--- Migration: Create all tables for new Supabase project
--- Run this on Supabase SQL Editor
+-- Migration: Create all tables for Supabase project
+-- Run this on Supabase SQL Editor for NEW projects
+-- For EXISTING projects, see ALTER TABLE section at the bottom
 
 -- Roles
 CREATE TABLE IF NOT EXISTS roles (
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
   auth_user_id TEXT UNIQUE NOT NULL,
   full_name TEXT NOT NULL,
   role_id TEXT NOT NULL REFERENCES roles(id),
-  department_id TEXT NOT NULL REFERENCES departments(id),
+  department_id TEXT REFERENCES departments(id),
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -36,11 +37,13 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   task_code TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
   content TEXT NOT NULL,
   source TEXT NOT NULL,
   assigned_date TIMESTAMPTZ NOT NULL,
   assigned_by TEXT NOT NULL,
   document_number TEXT,
+  coordinating_units TEXT,
   owner_department_id TEXT NOT NULL REFERENCES departments(id),
   required_completion_date TIMESTAMPTZ,
   actual_completion_date TIMESTAMPTZ,
@@ -102,3 +105,30 @@ CREATE TABLE IF NOT EXISTS period_locks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE(year, month)
 );
+
+
+-- ============================================================
+-- FOR EXISTING DATABASES: Run these ALTER TABLE statements
+-- to bring your schema up to date with the current Prisma schema
+-- ============================================================
+
+-- 1. Add missing columns to tasks
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS coordinating_units TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS incomplete_reason TEXT;
+
+-- 2. Make users.department_id nullable (Admin users may not belong to any department)
+-- First drop the FK, alter column, then re-add FK with SET NULL on delete
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_department_id_fkey;
+ALTER TABLE users ALTER COLUMN department_id DROP NOT NULL;
+ALTER TABLE users ADD CONSTRAINT users_department_id_fkey
+  FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- 3. Update tasks.updated_by FK to SET NULL on delete (instead of RESTRICT)
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_updated_by_fkey;
+ALTER TABLE tasks ADD CONSTRAINT tasks_updated_by_fkey
+  FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- 4. Backfill title for existing tasks that have NULL title
+-- (Set a default value based on task_code or content)
+UPDATE tasks SET title = content WHERE title IS NULL;

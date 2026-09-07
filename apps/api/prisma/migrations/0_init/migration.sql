@@ -1,13 +1,10 @@
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
--- CreateEnum
-CREATE TYPE "RoleName" AS ENUM ('ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR', 'VIEWER');
-
 -- CreateTable
 CREATE TABLE "roles" (
     "id" TEXT NOT NULL,
-    "name" "RoleName" NOT NULL,
+    "name" TEXT NOT NULL,
     "description" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -33,7 +30,7 @@ CREATE TABLE "users" (
     "auth_user_id" TEXT NOT NULL,
     "full_name" TEXT NOT NULL,
     "role_id" TEXT NOT NULL,
-    "department_id" TEXT NOT NULL,
+    "department_id" TEXT,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -45,15 +42,18 @@ CREATE TABLE "users" (
 CREATE TABLE "tasks" (
     "id" TEXT NOT NULL,
     "task_code" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "source" TEXT NOT NULL,
     "assigned_date" TIMESTAMP(3) NOT NULL,
     "assigned_by" TEXT NOT NULL,
     "document_number" TEXT,
+    "coordinating_units" TEXT,
     "owner_department_id" TEXT NOT NULL,
     "required_completion_date" TIMESTAMP(3),
     "actual_completion_date" TIMESTAMP(3),
     "completion_evidence" TEXT,
+    "incomplete_reason" TEXT,
     "is_cancelled" BOOLEAN NOT NULL DEFAULT false,
     "cancelled_at" TIMESTAMP(3),
     "cancelled_by" TEXT,
@@ -154,7 +154,7 @@ CREATE UNIQUE INDEX "period_locks_year_month_key" ON "period_locks"("year", "mon
 ALTER TABLE "users" ADD CONSTRAINT "users_role_id_fkey" FOREIGN KEY ("role_id") REFERENCES "roles"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "users" ADD CONSTRAINT "users_department_id_fkey" FOREIGN KEY ("department_id") REFERENCES "departments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "users" ADD CONSTRAINT "users_department_id_fkey" FOREIGN KEY ("department_id") REFERENCES "departments"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_owner_department_id_fkey" FOREIGN KEY ("owner_department_id") REFERENCES "departments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -163,7 +163,7 @@ ALTER TABLE "tasks" ADD CONSTRAINT "tasks_owner_department_id_fkey" FOREIGN KEY 
 ALTER TABLE "tasks" ADD CONSTRAINT "tasks_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "tasks" ADD CONSTRAINT "tasks_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "tasks" ADD CONSTRAINT "tasks_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "task_coordinating_departments" ADD CONSTRAINT "task_coordinating_departments_task_id_fkey" FOREIGN KEY ("task_id") REFERENCES "tasks"("id") ON DELETE CASCADE ON UPDATE CASCADE;
