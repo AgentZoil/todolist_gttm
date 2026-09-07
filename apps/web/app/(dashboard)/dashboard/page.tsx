@@ -138,7 +138,7 @@ export default function DashboardPage() {
       glowColor: "hover:shadow-red-500/20",
     },
     {
-      label: "Chưa đánh giá",
+      label: "Không đánh giá",
       value: totals.noEvaluation,
       icon: ClipboardList,
       gradient: "from-muted-foreground/20 to-muted-foreground/5",

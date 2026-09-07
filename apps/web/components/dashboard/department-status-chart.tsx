@@ -30,7 +30,7 @@ const STATUS_CONFIG = [
   { key: "completedLate", label: "Hoàn thành quá hạn", color: "#F97316" },
   { key: "inProgressOnTime", label: "Đang thực hiện", color: "#3B82F6" },
   { key: "inProgressLate", label: "Không hoàn thành", color: "#EF4444" },
-  { key: "noEvaluation", label: "Chưa đánh giá", color: "#CBD5E1" },
+  { key: "noEvaluation", label: "Không đánh giá", color: "#CBD5E1" },
 ] as const;
 
 interface TooltipPayloadItem {
@@ -109,35 +109,6 @@ function CustomTooltip({
   );
 }
 
-function CustomXAxisTick({
-  x,
-  y,
-  payload,
-}: {
-  x?: number;
-  y?: number;
-  payload?: { value: string };
-}) {
-  if (!payload || x === undefined || y === undefined) return null;
-  return (
-    <g transform={`translate(${x},${y})`}>
-      <text
-        x={0}
-        y={0}
-        dy={10}
-        textAnchor="end"
-        fill="#0F172A"
-        fontSize={11}
-        fontWeight={500}
-        fontFamily="Plus Jakarta Sans, sans-serif"
-        transform="rotate(-40)"
-      >
-        {payload.value}
-      </text>
-    </g>
-  );
-}
-
 export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
   const chartData = data.map((d) => ({
     _name: d.departmentName,
@@ -171,16 +142,17 @@ export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
               className="inline-block h-2.5 w-2.5 rounded-full"
               style={{ backgroundColor: s.color }}
             />
-            <span className="text-xs text-muted-foreground">{s.label}</span>
+            <span className="text-xs font-medium text-foreground/80">{s.label}</span>
           </div>
         ))}
       </div>
 
-      <ResponsiveContainer width="100%" height={420}>
+      <ResponsiveContainer width="100%" height={Math.max(Math.round(chartData.length * 32 * 0.75) + 30, 200)}>
         <BarChart
+          layout="vertical"
           data={chartData}
-          margin={{ top: 12, right: 16, left: 12, bottom: 80 }}
-          barCategoryGap="15%"
+          margin={{ top: 8, right: 48, left: 8, bottom: 4 }}
+          barCategoryGap="20%"
         >
           <defs>
             <linearGradient id="gridGrad" x1="0" y1="0" x2="0" y2="1">
@@ -189,39 +161,36 @@ export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
             </linearGradient>
           </defs>
           <CartesianGrid
-            vertical={false}
+            horizontal={false}
             stroke="url(#gridGrad)"
             strokeDasharray="3 3"
           />
           <XAxis
-            type="category"
-            dataKey="_name"
-            tick={<CustomXAxisTick />}
+            type="number"
+            tick={{ fontSize: 12, fill: "#334155", fontWeight: 600, fontFamily: "Plus Jakarta Sans, sans-serif" }}
             tickLine={false}
             axisLine={{ stroke: "#E2E8F0", strokeWidth: 1 }}
-            interval={0}
-            height={80}
+            allowDecimals={false}
           />
           <YAxis
-            type="number"
-            tick={{ fontSize: 11, fill: "#94A3B8", fontFamily: "Plus Jakarta Sans, sans-serif" }}
+            type="category"
+            dataKey="_name"
+            width={200}
+            tick={{ fontSize: 12, fill: "#0F172A", fontWeight: 500, fontFamily: "Plus Jakarta Sans, sans-serif" }}
             tickLine={false}
             axisLine={false}
-            allowDecimals={false}
           />
           <Tooltip
             content={<CustomTooltip />}
             cursor={{ fill: "rgba(79,70,229,0.04)" }}
           />
 
-          {STATUS_CONFIG.map((s, i) => {
-            const isLast = i === STATUS_CONFIG.length - 1;
-            return (
+          {STATUS_CONFIG.map((s) => (
               <Bar
                 key={s.key}
                 dataKey={s.key}
                 stackId="a"
-                radius={isLast ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+                radius={[0, 0, 0, 0]}
               >
                 {chartData.map((_, idx) => (
                   <Cell
@@ -231,8 +200,7 @@ export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
                   />
                 ))}
               </Bar>
-            );
-          })}
+          ))}
         </BarChart>
       </ResponsiveContainer>
     </div>
