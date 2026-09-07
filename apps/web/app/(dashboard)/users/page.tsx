@@ -159,7 +159,7 @@ export default function UsersPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowForm(false)} />
+          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={() => setShowForm(false)} />
           <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-lg mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <div className="flex items-center gap-2">
