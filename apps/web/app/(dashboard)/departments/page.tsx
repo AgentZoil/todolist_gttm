@@ -60,7 +60,7 @@ export default function DepartmentsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {departments.map((dept, index) => (
+        {departments.map((dept) => (
           <Card key={dept.id} className="group relative overflow-hidden transition-shadow hover:shadow-md">
             <CardContent className="py-4">
               <div className="flex items-start justify-between">

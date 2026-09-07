@@ -183,17 +183,7 @@ async function main() {
   }
 
   // Read CSV file
-  const csvFileName = deptName.replace(/\s+/g, '').replace(/[àáạảã]/g, 'a').replace(/[ăắằẳẵ]/g, 'a').replace(/[âấầẩẫ]/g, 'a').replace(/[đ]/g, 'd').replace(/[èéẹẻẽ]/g, 'e').replace(/[êếềểễ]/g, 'e').replace(/[ìíịỉĩ]/g, 'i').replace(/[òóọỏõ]/g, 'o').replace(/[ôốồổỗ]/g, 'o').replace(/[ơớờởỡ]/g, 'o').replace(/[ùúụủũ]/g, 'u').replace(/[ưứừửữ]/g, 'u').replace(/[ỳýỵỷỹ]/g, 'y').replace(/[A-Z]/g, (c) => c);
   
-  // Normalize Vietnamese characters
-  function removeDiacritics(str: string) {
-    return str
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/đ/g, 'd')
-      .replace(/Đ/g, 'D');
-  }
-
   // Alias mapping for abbreviated department names
   const aliases: { [key: string]: string } = {
     'trungtamktcndbphiabac': 'trungtamktcnduongbophiabac',

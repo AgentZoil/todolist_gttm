@@ -70,7 +70,6 @@ export class DashboardService {
     const total = enrichedTasks.length;
     const completed = enrichedTasks.filter((t) =>
       [
-        'COMPLETED',
         'COMPLETED_EARLY',
         'COMPLETED_ON_TIME',
         'COMPLETED_LATE',
