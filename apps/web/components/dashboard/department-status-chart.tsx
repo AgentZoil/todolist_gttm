@@ -175,7 +175,7 @@ export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
           <YAxis
             type="category"
             dataKey="_name"
-            width={200}
+            width={260}
             tick={{ fontSize: 12, fill: "#0F172A", fontWeight: 500, fontFamily: "Plus Jakarta Sans, sans-serif" }}
             tickLine={false}
             axisLine={false}

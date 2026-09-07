@@ -180,7 +180,8 @@ export default function TasksPage() {
       })
       .then(([user, depts]) => {
         if (depts && depts.length > 0) {
-          const defaultDept = user.departmentId || depts[0].id;
+          const sortedDepts = [...depts].sort((a, b) => a.id.localeCompare(b.id));
+          const defaultDept = user.departmentId || sortedDepts[0].id;
           setFilterDepartment(defaultDept);
           setFormData((prev) => ({ ...prev, ownerDepartmentId: defaultDept }));
           return fetchTasks({ deptId: defaultDept });
@@ -552,8 +553,8 @@ export default function TasksPage() {
               disabled={filtering}
               className="h-9 rounded-lg border-2 border-primary/40 bg-accent/50 px-3 pr-8 text-sm font-medium text-primary shadow-sm ring-1 ring-primary/10 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
             >
-              {departments.map((dept) => (
-                <option key={dept.id} value={dept.id}>{dept.name}</option>
+              {[...departments].sort((a, b) => a.id.localeCompare(b.id)).map((dept, i) => (
+                <option key={dept.id} value={dept.id}>{i + 1}. {dept.name}</option>
               ))}
             </select>
             {filtering && (
@@ -813,9 +814,9 @@ export default function TasksPage() {
                       required
                     >
                       <option value="">Chọn phòng ban</option>
-                      {departments.map((dept) => (
+                      {[...departments].sort((a, b) => a.id.localeCompare(b.id)).map((dept, i) => (
                         <option key={dept.id} value={dept.id}>
-                          {dept.name}
+                          {i + 1}. {dept.name}
                         </option>
                       ))}
                     </select>

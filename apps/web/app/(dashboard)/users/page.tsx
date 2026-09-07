@@ -236,7 +236,7 @@ export default function UsersPage() {
               {roles.find((r) => r.id === formData.roleId)?.name === "DEPARTMENT_EDITOR" && (
                 <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200 fill-mode-both">
                   <label className="block text-sm font-medium text-foreground">
-                    Phòng ban <span className="text-destructive">*</span>
+                    Phòng ban/Đơn vị <span className="text-destructive">*</span>
                   </label>
                   <select
                     value={formData.departmentId}
@@ -287,7 +287,7 @@ export default function UsersPage() {
                   Vai trò
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Phòng ban
+                  Phòng ban/Đơn vị
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái

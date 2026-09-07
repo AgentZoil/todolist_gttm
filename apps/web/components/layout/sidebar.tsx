@@ -24,7 +24,7 @@ interface UserInfo {
 const allNavItems = [
   { label: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
   { label: "Nhiệm vụ", href: "/tasks", icon: ListTodo },
-  { label: "Phòng ban", href: "/departments", icon: Building2 },
+  { label: "Phòng ban/Đơn vị", href: "/departments", icon: Building2 },
   { label: "Người dùng", href: "/users", icon: Users, roles: ["ADMIN", "SECRETARY"] },
   { label: "Khóa tháng", href: "/period-locks", icon: Lock, roles: ["ADMIN"] },
   { label: "Nhật ký hoạt động", href: "/audit-logs", icon: ScrollText, roles: ["ADMIN"] },

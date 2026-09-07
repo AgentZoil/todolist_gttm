@@ -169,7 +169,7 @@ export default function PeriodLocksPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
-                Phòng ban phụ trách
+                Phòng ban/Đơn vị phụ trách
               </li>
               <li className="flex items-start gap-2">
                 <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />

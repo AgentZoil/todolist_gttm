@@ -105,7 +105,7 @@ export class TasksService {
         const [year, month, day] = dateTo.split('-').map(Number);
         dateFilter.lte = new Date(year, month - 1, day, 23, 59, 59, 999);
       }
-      where.assignedDate = dateFilter;
+      where.requiredCompletionDate = dateFilter;
     }
     if (assignedBy) {
       where.assignedBy = assignedBy;

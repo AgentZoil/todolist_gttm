@@ -53,7 +53,7 @@ export default function DepartmentsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Phòng ban</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Phòng ban/Đơn vị</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Quản lý {departments.length} phòng ban · {activeCount} đang hoạt động
         </p>
