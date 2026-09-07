@@ -37,6 +37,7 @@ export class AuthController {
   }
 
   @Get('roles')
+  @UseGuards(AuthGuard)
   async getRoles() {
     const roles = await this.prisma.role.findMany({
       orderBy: { name: 'asc' },

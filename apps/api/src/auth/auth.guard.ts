@@ -7,21 +7,11 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from './supabase.service';
 import { PrismaService } from '../prisma/prisma.service';
+import type { CurrentUser } from './current-user.middleware';
 
 export interface AuthUser {
   authUserId: string;
   email: string;
-}
-
-export interface CurrentUser {
-  id: string;
-  authUserId: string;
-  email: string;
-  fullName: string;
-  roleId: string;
-  departmentId: string;
-  role: string;
-  isActive: boolean;
 }
 
 declare global {
