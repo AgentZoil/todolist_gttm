@@ -46,10 +46,21 @@ export class DashboardService {
     const tasks = await this.prisma.task.findMany({
       where: {
         isCancelled: false,
-        requiredCompletionDate: {
-          gte: startDate,
-          lte: endDate,
-        },
+        OR: [
+          {
+            requiredCompletionDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+          {
+            requiredCompletionDate: null,
+            assignedDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+        ],
       },
       select: {
         isCancelled: true,
@@ -120,10 +131,21 @@ export class DashboardService {
     const allTasks = await this.prisma.task.findMany({
       where: {
         isCancelled: false,
-        requiredCompletionDate: {
-          gte: startDate,
-          lte: endDate,
-        },
+        OR: [
+          {
+            requiredCompletionDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+          {
+            requiredCompletionDate: null,
+            assignedDate: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+        ],
       },
       select: {
         ownerDepartmentId: true,
