@@ -1,6 +1,7 @@
 import {
   Injectable,
   ForbiddenException,
+  NotFoundException,
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -328,7 +329,7 @@ export class TasksService {
     },
   ) {
     const oldTask = await this.prisma.task.findUnique({ where: { id } });
-    if (!oldTask) throw new ForbiddenException('Task not found');
+    if (!oldTask) throw new NotFoundException('Task not found');
 
     if (
       data.expectedVersion !== undefined &&
@@ -478,7 +479,7 @@ export class TasksService {
 
   async finalize(id: string, finalizedBy: string, userRole: string) {
     const task = await this.prisma.task.findUnique({ where: { id } });
-    if (!task) throw new ForbiddenException('Task not found');
+    if (!task) throw new NotFoundException('Task not found');
 
     if (task.isFinalized) {
       throw new ForbiddenException('Nhiệm vụ đã được chốt');
@@ -517,7 +518,7 @@ export class TasksService {
 
   async unfinalize(id: string, unfinalizedBy: string) {
     const task = await this.prisma.task.findUnique({ where: { id } });
-    if (!task) throw new ForbiddenException('Task not found');
+    if (!task) throw new NotFoundException('Task not found');
 
     if (!task.isFinalized) {
       throw new ForbiddenException('Nhiệm vụ chưa được chốt');
@@ -556,7 +557,7 @@ export class TasksService {
 
   async remove(id: string, deletedBy: string, userRole: string) {
     const task = await this.prisma.task.findUnique({ where: { id } });
-    if (!task) throw new ForbiddenException('Task not found');
+    if (!task) throw new NotFoundException('Task not found');
 
     if (userRole === 'DEPARTMENT_EDITOR') {
       const deptId = await this.getDepartmentId(deletedBy);
