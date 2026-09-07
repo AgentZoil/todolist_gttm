@@ -17,9 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  Building2,
   Loader2,
-  XCircle,
   Calendar,
   Lock,
   Unlock,
@@ -77,8 +75,6 @@ interface UserInfo {
   departmentName: string;
 }
 
-type TabType = "in_progress" | "completed";
-
 const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-red-50 text-red-700",
   IN_PROGRESS: "bg-blue-50 text-blue-700",
@@ -108,12 +104,13 @@ export default function TasksPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
+  const [tempDateFrom, setTempDateFrom] = useState("");
+  const [tempDateTo, setTempDateTo] = useState("");
   const [showDatePopover, setShowDatePopover] = useState(false);
   const [filterAssignedBy, setFilterAssignedBy] = useState("");
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<TabType>("in_progress");
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -209,13 +206,26 @@ export default function TasksPage() {
   };
 
   const handleDateFromFilter = (dateFrom: string) => {
-    setFilterDateFrom(dateFrom);
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+    setTempDateFrom(dateFrom);
   };
 
   const handleDateToFilter = (dateTo: string) => {
-    setFilterDateTo(dateTo);
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+    setTempDateTo(dateTo);
+  };
+
+  const applyDateFilter = () => {
+    setFilterDateFrom(tempDateFrom);
+    setFilterDateTo(tempDateTo);
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: tempDateFrom, dateTo: tempDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+    setShowDatePopover(false);
+  };
+
+  const clearDateFilter = () => {
+    setTempDateFrom("");
+    setTempDateTo("");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: "", dateTo: "", assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
   };
 
   const handleAssignedByFilter = (assignedBy: string) => {
@@ -441,15 +451,6 @@ export default function TasksPage() {
     return `${d.getDate()}/${d.getMonth() + 1}`;
   };
 
-  const isInProgress = (task: Task) =>
-    task.status === "IN_PROGRESS" || task.status === "NO_EVALUATION";
-
-  const isCompleted = (task: Task) =>
-    task.status === "COMPLETED_EARLY" ||
-    task.status === "COMPLETED_ON_TIME" ||
-    task.status === "COMPLETED_LATE";
-
-  const filteredTasks = tasks;
 
   if (loading) {
     return (
@@ -505,7 +506,7 @@ export default function TasksPage() {
       )}
       {confirmDeleteId && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)} />
+          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)} />
           <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-sm mx-4 p-6 ring-1 ring-foreground/5">
             <div className="flex flex-col items-center text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 mb-4">
@@ -601,7 +602,11 @@ export default function TasksPage() {
         </select>
         <div className="relative">
           <button
-            onClick={() => setShowDatePopover(!showDatePopover)}
+            onClick={() => {
+              setTempDateFrom(filterDateFrom);
+              setTempDateTo(filterDateTo);
+              setShowDatePopover(!showDatePopover);
+            }}
             className={cn(
               "h-9 rounded-lg border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors flex items-center gap-2",
               filterDateFrom || filterDateTo
@@ -620,14 +625,14 @@ export default function TasksPage() {
           </button>
           {showDatePopover && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowDatePopover(false)} />
+              <div className="fixed inset-0 z-40 cursor-pointer" onClick={() => setShowDatePopover(false)} />
               <div className="absolute top-full left-0 mt-1 z-50 bg-card rounded-xl border border-border shadow-lg p-3 min-w-[260px]">
                 <div className="flex flex-col gap-2.5">
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Từ ngày</label>
                     <input
                       type="date"
-                      value={filterDateFrom}
+                      value={tempDateFrom}
                       onChange={(e) => handleDateFromFilter(e.target.value)}
                       className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     />
@@ -636,23 +641,28 @@ export default function TasksPage() {
                     <label className="text-xs font-medium text-muted-foreground mb-1 block">Đến ngày</label>
                     <input
                       type="date"
-                      value={filterDateTo}
-                      min={filterDateFrom || undefined}
+                      value={tempDateTo}
+                      min={tempDateFrom || undefined}
                       onChange={(e) => handleDateToFilter(e.target.value)}
                       className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                     />
                   </div>
-                  {(filterDateFrom || filterDateTo) && (
+                  <div className="flex items-center gap-2 pt-0.5">
                     <button
-                      onClick={() => {
-                        handleDateFromFilter("");
-                        handleDateToFilter("");
-                      }}
-                      className="h-7 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={applyDateFilter}
+                      className="flex-1 h-8 rounded-lg bg-primary text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
                     >
-                      Xóa khoảng ngày
+                      Áp dụng
                     </button>
-                  )}
+                    {(tempDateFrom || tempDateTo) && (
+                      <button
+                        onClick={clearDateFilter}
+                        className="h-8 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        Xóa
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </>
@@ -662,6 +672,8 @@ export default function TasksPage() {
           <button
             onClick={() => {
               setFilterStatus("");
+              setTempDateFrom("");
+              setTempDateTo("");
               setFilterDateFrom("");
               setFilterDateTo("");
               setFilterAssignedBy("");
@@ -676,7 +688,7 @@ export default function TasksPage() {
 
       {canEditTasks && showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !submitting && setShowForm(false)} />
+          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={() => !submitting && setShowForm(false)} />
           <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <div className="flex items-center gap-2">
@@ -859,7 +871,7 @@ export default function TasksPage() {
       {/* Detail modal */}
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }} />
+          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }} />
           <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-5xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-semibold text-foreground">
@@ -1151,14 +1163,14 @@ export default function TasksPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredTasks.length === 0 ? (
+                {tasks.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-muted-foreground">
                       Không có nhiệm vụ nào
                     </td>
                   </tr>
                 ) : (
-                  filteredTasks.map((task, index) => (
+                  tasks.map((task, index) => (
                     <tr
                       key={task.id}
                       className={cn("border-b border-border/50 transition-colors hover:bg-muted/30 cursor-pointer", index % 2 === 0 ? "bg-card" : "bg-muted/10")}
