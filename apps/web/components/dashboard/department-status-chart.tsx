@@ -6,10 +6,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   CartesianGrid,
-  LabelList,
+  Cell,
 } from "recharts";
 import { BarChart3 } from "lucide-react";
 
@@ -31,14 +30,14 @@ const STATUS_CONFIG = [
   { key: "completedLate", label: "Hoàn thành quá hạn", color: "#F97316" },
   { key: "inProgressOnTime", label: "Đang thực hiện", color: "#3B82F6" },
   { key: "inProgressLate", label: "Không hoàn thành", color: "#EF4444" },
-  { key: "noEvaluation", label: "Chưa đánh giá", color: "#94A3B8" },
+  { key: "noEvaluation", label: "Chưa đánh giá", color: "#CBD5E1" },
 ] as const;
 
 interface TooltipPayloadItem {
   name: string;
   value: number;
   color: string;
-  payload: Record<string, number> & { _name: string };
+  payload: Record<string, number> & { _name: string; total: number };
 }
 
 function CustomTooltip({
@@ -57,61 +56,85 @@ function CustomTooltip({
   const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-3 shadow-xl ring-1 ring-foreground/5">
-      <p className="mb-2 text-sm font-semibold text-foreground">{name}</p>
-      <div className="space-y-1.5">
-        {STATUS_CONFIG.map((s) => {
-          const val = row[s.key] as number;
-          return (
-            <div key={s.key} className="flex items-center justify-between gap-6 text-xs">
-              <div className="flex items-center gap-2">
+    <div className="overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_8px_30px_-4px_rgba(79,70,229,0.15)] backdrop-blur-md ring-1 ring-primary/5">
+      <div className="border-b border-border/40 bg-gradient-to-r from-primary/5 to-secondary/5 px-4 py-2.5">
+        <p className="text-sm font-semibold text-foreground">{name}</p>
+      </div>
+      <div className="px-4 py-3">
+        <div className="space-y-2">
+          {STATUS_CONFIG.map((s) => {
+            const val = row[s.key] as number;
+            const pct = total > 0 ? Math.round((val / total) * 100) : 0;
+            return (
+              <div key={s.key} className="flex items-center gap-3">
                 <span
-                  className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: s.color }}
+                  className="inline-block h-2 w-2 flex-shrink-0 rounded-full ring-2 ring-offset-1"
+                  style={{
+                    backgroundColor: s.color,
+                    ringColor: s.color,
+                    "--tw-ring-color": `${s.color}33`,
+                  } as React.CSSProperties}
                 />
-                <span className="text-muted-foreground">{s.label}</span>
+                <span className="flex-1 text-xs text-muted-foreground">{s.label}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold tabular-nums text-foreground">{val}</span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground/70">({pct}%)</span>
+                </div>
               </div>
-              <span className="font-semibold tabular-nums text-foreground">{val}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-xs">
-        <span className="font-medium text-muted-foreground">Tổng</span>
-        <span className="font-bold tabular-nums text-foreground">{total}</span>
-      </div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-medium text-muted-foreground">Tỷ lệ hoàn thành</span>
-        <span
-          className={`font-bold tabular-nums ${
-            rate >= 80
-              ? "text-emerald-500"
-              : rate >= 50
-              ? "text-amber-500"
-              : "text-red-500"
-          }`}
-        >
-          {rate}%
-        </span>
+            );
+          })}
+        </div>
+        <div className="mt-3 space-y-1.5 border-t border-border/40 pt-3">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Tổng nhiệm vụ</span>
+            <span className="font-bold tabular-nums text-foreground">{total}</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Tỷ lệ hoàn thành</span>
+            <span
+              className={`font-bold tabular-nums ${
+                rate >= 80
+                  ? "text-emerald-500"
+                  : rate >= 50
+                  ? "text-amber-500"
+                  : "text-red-500"
+              }`}
+            >
+              {rate}%
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function CustomLegend({ payload }: { payload?: Array<{ value: string; color: string }> }) {
-  if (!payload) return null;
+function CustomXAxisTick({
+  x,
+  y,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value: string };
+}) {
+  if (!payload || x === undefined || y === undefined) return null;
   return (
-    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pb-3 pt-1">
-      {STATUS_CONFIG.map((s) => (
-        <div key={s.key} className="flex items-center gap-1.5">
-          <span
-            className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{ backgroundColor: s.color }}
-          />
-          <span className="text-xs text-muted-foreground">{s.label}</span>
-        </div>
-      ))}
-    </div>
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={0}
+        dy={10}
+        textAnchor="end"
+        fill="#0F172A"
+        fontSize={11}
+        fontWeight={500}
+        fontFamily="Plus Jakarta Sans, sans-serif"
+        transform="rotate(-40)"
+      >
+        {payload.value}
+      </text>
+    </g>
   );
 }
 
@@ -126,74 +149,90 @@ export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
     noEvaluation: d.noEvaluation,
   }));
 
-  const barHeight = 30;
-  const chartHeight = Math.max(chartData.length * barHeight + 30, 200);
-
   return (
-    <div className="rounded-2xl border border-border/40 bg-card/80 p-5 shadow-sm backdrop-blur-sm">
-      <div className="mb-4 flex items-center gap-2.5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
-          <BarChart3 className="h-4.5 w-4.5 text-primary" />
+    <div className="overflow-hidden rounded-2xl border border-border/40 bg-card p-6 shadow-[0_4px_20px_-2px_rgba(79,70,229,0.08)] transition-shadow duration-300 hover:shadow-[0_10px_25px_-5px_rgba(79,70,229,0.12)]">
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary shadow-[0_4px_12px_0_rgba(79,70,229,0.25)]">
+          <BarChart3 className="h-5 w-5 text-white" />
         </div>
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">
+        <div className="flex-1">
+          <h3 className="text-sm font-bold tracking-tight text-foreground">
             Biểu đồ tổng hợp theo phòng ban
           </h3>
-          <p className="text-xs text-muted-foreground">Phân bổ trạng thái nhiệm vụ</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">Phân bổ trạng thái nhiệm vụ</p>
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={chartHeight}>
+      {/* Legend */}
+      <div className="mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pb-3 pt-1">
+        {STATUS_CONFIG.map((s) => (
+          <div key={s.key} className="flex items-center gap-1.5">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: s.color }}
+            />
+            <span className="text-xs text-muted-foreground">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <ResponsiveContainer width="100%" height={420}>
         <BarChart
-          layout="vertical"
           data={chartData}
-          margin={{ top: 4, right: 48, left: 0, bottom: 4 }}
-          barCategoryGap="20%"
+          margin={{ top: 12, right: 16, left: 12, bottom: 80 }}
+          barCategoryGap="15%"
         >
+          <defs>
+            <linearGradient id="gridGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#E2E8F0" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="#E2E8F0" stopOpacity={0.1} />
+            </linearGradient>
+          </defs>
           <CartesianGrid
-            horizontal={false}
+            vertical={false}
+            stroke="url(#gridGrad)"
             strokeDasharray="3 3"
-            stroke="#E2E8F0"
-            strokeOpacity={0.6}
           />
           <XAxis
+            type="category"
+            dataKey="_name"
+            tick={<CustomXAxisTick />}
+            tickLine={false}
+            axisLine={{ stroke: "#E2E8F0", strokeWidth: 1 }}
+            interval={0}
+            height={80}
+          />
+          <YAxis
             type="number"
-            tick={{ fontSize: 11, fill: "#64748B" }}
+            tick={{ fontSize: 11, fill: "#94A3B8", fontFamily: "Plus Jakarta Sans, sans-serif" }}
             tickLine={false}
             axisLine={false}
             allowDecimals={false}
           />
-          <YAxis
-            type="category"
-            dataKey="_name"
-            width={260}
-            tick={{ fontSize: 12, fill: "#0F172A", fontWeight: 500 }}
-            tickLine={false}
-            axisLine={false}
-          />
           <Tooltip
             content={<CustomTooltip />}
-            cursor={{ fill: "rgba(0,0,0,0.03)" }}
+            cursor={{ fill: "rgba(79,70,229,0.04)" }}
           />
-          <Legend content={<CustomLegend />} verticalAlign="top" />
 
-          {STATUS_CONFIG.map((s, i) => (
-            <Bar
-              key={s.key}
-              dataKey={s.key}
-              stackId="a"
-              fill={s.color}
-              radius={i === STATUS_CONFIG.length - 1 ? [0, 4, 4, 0] : [0, 0, 0, 0]}
-            >
-              <LabelList
-                position="insideRight"
-                fill="#fff"
-                fontSize={11}
-                fontWeight={600}
-                offset={4}
-              />
-            </Bar>
-          ))}
+          {STATUS_CONFIG.map((s, i) => {
+            const isLast = i === STATUS_CONFIG.length - 1;
+            return (
+              <Bar
+                key={s.key}
+                dataKey={s.key}
+                stackId="a"
+                radius={isLast ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+              >
+                {chartData.map((_, idx) => (
+                  <Cell
+                    key={idx}
+                    fill={s.color}
+                    fillOpacity={0.9}
+                  />
+                ))}
+              </Bar>
+            );
+          })}
         </BarChart>
       </ResponsiveContainer>
     </div>
