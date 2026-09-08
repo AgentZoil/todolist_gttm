@@ -40,6 +40,9 @@ coverage/
 # Memory & State
 memory-state.md
 
+# Local planning notes
+docs/chart-tooltip-plan.md
+
 # Prisma
 apps/api/prisma/data/*.csv
 

@@ -229,7 +229,13 @@ export default function DashboardPage() {
       </div>
 
       {/* Department Status Chart */}
-      {departments.length > 0 && <DepartmentStatusChart data={departments} />}
+      {departments.length > 0 && (
+        <DepartmentStatusChart
+          key={selectedMonth}
+          data={departments}
+          selectedMonth={selectedMonth}
+        />
+      )}
     </div>
   );
 }

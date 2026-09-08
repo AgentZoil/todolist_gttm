@@ -71,13 +71,16 @@ export class TasksService {
     } = params;
 
     const where: any = {};
+    const andConditions: any[] = [];
     if (departmentId) where.ownerDepartmentId = departmentId;
     if (search) {
-      where.OR = [
-        { content: { contains: search, mode: 'insensitive' } },
-        { taskCode: { contains: search, mode: 'insensitive' } },
-        { source: { contains: search, mode: 'insensitive' } },
-      ];
+      andConditions.push({
+        OR: [
+          { content: { contains: search, mode: 'insensitive' } },
+          { taskCode: { contains: search, mode: 'insensitive' } },
+          { source: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
     if (status) {
       if (status === 'IN_PROGRESS') {
@@ -105,11 +108,19 @@ export class TasksService {
         const [year, month, day] = dateTo.split('-').map(Number);
         dateFilter.lte = new Date(year, month - 1, day, 23, 59, 59, 999);
       }
-      where.requiredCompletionDate = dateFilter;
+      // Match dashboard month semantics: use deadline when present;
+      // otherwise use assigned date for NO_EVALUATION tasks.
+      andConditions.push({
+        OR: [
+          { requiredCompletionDate: dateFilter },
+          { requiredCompletionDate: null, assignedDate: dateFilter },
+        ],
+      });
     }
     if (assignedBy) {
       where.assignedBy = assignedBy;
     }
+    if (andConditions.length > 0) where.AND = andConditions;
 
     const [tasks, total] = await Promise.all([
       this.prisma.task.findMany({

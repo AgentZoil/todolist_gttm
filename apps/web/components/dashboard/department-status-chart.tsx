@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -10,7 +11,9 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
-import { BarChart3 } from "lucide-react";
+import type { Coordinate } from "recharts";
+import { BarChart3, ExternalLink } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface DepartmentStats {
   departmentId: string;
@@ -25,6 +28,17 @@ interface DepartmentStats {
   completionRate: number;
 }
 
+interface ChartDataRow {
+  _id: string;
+  _name: string;
+  total: number;
+  completedOnTime: number;
+  completedLate: number;
+  inProgressOnTime: number;
+  inProgressLate: number;
+  noEvaluation: number;
+}
+
 const STATUS_CONFIG = [
   { key: "completedOnTime", label: "Hoàn thành trước hạn", color: "#10B981" },
   { key: "completedLate", label: "Hoàn thành quá hạn", color: "#F97316" },
@@ -37,24 +51,39 @@ interface TooltipPayloadItem {
   name: string;
   value: number;
   color: string;
-  payload: Record<string, number> & { _name: string; total: number };
+  payload: ChartDataRow;
 }
 
-function CustomTooltip({
-  active,
-  payload,
+interface StaticTooltip {
+  x: number;
+  y: number;
+  data: DepartmentStats;
+}
+
+interface ChartInteractionState {
+  activeTooltipIndex?: number | string | null;
+  activeLabel?: string | number;
+  activeCoordinate?: Coordinate;
+}
+
+function getCompletionRate(row: ChartDataRow | DepartmentStats) {
+  const completed = row.completedOnTime + row.completedLate;
+  return row.total > 0 ? Math.round((completed / row.total) * 100) : 0;
+}
+
+function TooltipContent({
+  name,
+  total,
+  rate,
+  row,
+  onViewDetail,
 }: {
-  active?: boolean;
-  payload?: TooltipPayloadItem[];
+  name: string;
+  total: number;
+  rate: number;
+  row: ChartDataRow | DepartmentStats;
+  onViewDetail?: () => void;
 }) {
-  if (!active || !payload || payload.length === 0) return null;
-
-  const row = payload[0].payload;
-  const name = row._name as string;
-  const total = row.total as number;
-  const completed = (row.completedOnTime as number) + (row.completedLate as number);
-  const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
-
   return (
     <div className="overflow-hidden rounded-xl border border-border/60 bg-card/95 shadow-[0_8px_30px_-4px_rgba(79,70,229,0.15)] backdrop-blur-md ring-1 ring-primary/5">
       <div className="border-b border-border/40 bg-gradient-to-r from-primary/5 to-secondary/5 px-4 py-2.5">
@@ -63,7 +92,7 @@ function CustomTooltip({
       <div className="px-4 py-3">
         <div className="space-y-2">
           {STATUS_CONFIG.map((s) => {
-            const val = row[s.key] as number;
+            const val = row[s.key] ?? 0;
             const pct = total > 0 ? Math.round((val / total) * 100) : 0;
             return (
               <div key={s.key} className="flex items-center gap-3">
@@ -103,25 +132,141 @@ function CustomTooltip({
               {rate}%
             </span>
           </div>
+          {onViewDetail && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onViewDetail();
+              }}
+              className="mt-2 flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Xem chi tiết
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
-  const chartData = data.map((d) => ({
-    _name: d.departmentName,
-    total: d.total,
-    completedOnTime: d.completedOnTime,
-    completedLate: d.completedLate,
-    inProgressOnTime: d.inProgressOnTime,
-    inProgressLate: d.inProgressLate,
-    noEvaluation: d.noEvaluation,
+function CustomTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+
+  const row = payload[0].payload;
+  return (
+    <TooltipContent
+      name={row._name}
+      total={row.total}
+      rate={getCompletionRate(row)}
+      row={row}
+    />
+  );
+}
+
+function getStaticPosition(
+  container: HTMLDivElement,
+  fallback?: Coordinate,
+): Coordinate | null {
+  const tooltip = container.querySelector<HTMLElement>(".recharts-tooltip-wrapper");
+  if (tooltip && tooltip.getBoundingClientRect().width > 0) {
+    const containerRect = container.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    return {
+      x: tooltipRect.left - containerRect.left,
+      y: tooltipRect.top - containerRect.top,
+    };
+  }
+
+  return fallback ?? null;
+}
+
+export function DepartmentStatusChart({
+  data,
+  selectedMonth,
+}: {
+  data: DepartmentStats[];
+  selectedMonth: string;
+}) {
+  const router = useRouter();
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [pinnedTooltip, setPinnedTooltip] = useState<StaticTooltip | null>(null);
+
+  const chartData: ChartDataRow[] = data.map((department) => ({
+    _id: department.departmentId,
+    _name: department.departmentName,
+    total: department.total,
+    completedOnTime: department.completedOnTime,
+    completedLate: department.completedLate,
+    inProgressOnTime: department.inProgressOnTime,
+    inProgressLate: department.inProgressLate,
+    noEvaluation: department.noEvaluation,
   }));
 
+  useEffect(() => {
+    if (!pinnedTooltip) return;
+
+    const handleMouseDown = (event: MouseEvent) => {
+      const tooltip = event.target as Node;
+      if (!event.currentTarget || !chartContainerRef.current?.contains(tooltip)) {
+        setPinnedTooltip(null);
+        return;
+      }
+
+      const pinnedElement = chartContainerRef.current.querySelector("[data-pinned-tooltip]");
+      if (!pinnedElement?.contains(tooltip)) setPinnedTooltip(null);
+    };
+
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => document.removeEventListener("mousedown", handleMouseDown);
+  }, [pinnedTooltip]);
+
+  const handleChartClick = (state: ChartInteractionState) => {
+    if (!chartContainerRef.current) return;
+
+    const index = state.activeTooltipIndex == null
+      ? -1
+      : Number(state.activeTooltipIndex);
+    const department = Number.isInteger(index) && index >= 0
+      ? data[index]
+      : data.find((item) => item.departmentName === state.activeLabel);
+    if (!department) return;
+
+    const position = getStaticPosition(
+      chartContainerRef.current,
+      state.activeCoordinate,
+    );
+    if (!position) return;
+
+    setPinnedTooltip({
+      x: position.x,
+      y: position.y,
+      data: department,
+    });
+  };
+
+  const buildDetailUrl = (departmentId: string) => {
+    const [year, month] = selectedMonth.split("-").map(Number);
+    const lastDay = new Date(year, month, 0).getDate();
+    const params = new URLSearchParams({
+      departmentId,
+      dateFrom: `${year}-${String(month).padStart(2, "0")}-01`,
+      dateTo: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+    });
+    return `/tasks?${params.toString()}`;
+  };
+
+  const chartHeight = Math.max(Math.round(chartData.length * 32 * 0.75) + 30, 200);
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-border/40 bg-card p-6 shadow-[0_4px_20px_-2px_rgba(79,70,229,0.08)] transition-shadow duration-300 hover:shadow-[0_10px_25px_-5px_rgba(79,70,229,0.12)]">
+    <div className="rounded-2xl border border-border/40 bg-card p-6 shadow-[0_4px_20px_-2px_rgba(79,70,229,0.08)] transition-shadow duration-300 hover:shadow-[0_10px_25px_-5px_rgba(79,70,229,0.12)]">
       <div className="mb-5 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary shadow-[0_4px_12px_0_rgba(79,70,229,0.25)]">
           <BarChart3 className="h-5 w-5 text-white" />
@@ -134,75 +279,90 @@ export function DepartmentStatusChart({ data }: { data: DepartmentStats[] }) {
         </div>
       </div>
 
-      {/* Legend */}
       <div className="mb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pb-3 pt-1">
-        {STATUS_CONFIG.map((s) => (
-          <div key={s.key} className="flex items-center gap-1.5">
+        {STATUS_CONFIG.map((status) => (
+          <div key={status.key} className="flex items-center gap-1.5">
             <span
               className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: s.color }}
+              style={{ backgroundColor: status.color }}
             />
-            <span className="text-xs font-medium text-foreground/80">{s.label}</span>
+            <span className="text-xs font-medium text-foreground/80">{status.label}</span>
           </div>
         ))}
       </div>
 
-      <ResponsiveContainer width="100%" height={Math.max(Math.round(chartData.length * 32 * 0.75) + 30, 200)}>
-        <BarChart
-          layout="vertical"
-          data={chartData}
-          margin={{ top: 8, right: 48, left: 8, bottom: 4 }}
-          barCategoryGap="20%"
-        >
-          <defs>
-            <linearGradient id="gridGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#E2E8F0" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#E2E8F0" stopOpacity={0.1} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid
-            horizontal={false}
-            stroke="url(#gridGrad)"
-            strokeDasharray="3 3"
-          />
-          <XAxis
-            type="number"
-            tick={{ fontSize: 12, fill: "#334155", fontWeight: 600, fontFamily: "Plus Jakarta Sans, sans-serif" }}
-            tickLine={false}
-            axisLine={{ stroke: "#E2E8F0", strokeWidth: 1 }}
-            allowDecimals={false}
-          />
-          <YAxis
-            type="category"
-            dataKey="_name"
-            width={260}
-            tick={{ fontSize: 12, fill: "#0F172A", fontWeight: 500, fontFamily: "Plus Jakarta Sans, sans-serif" }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <Tooltip
-            content={<CustomTooltip />}
-            cursor={{ fill: "rgba(79,70,229,0.04)" }}
-          />
+      <div ref={chartContainerRef} className="relative cursor-pointer">
+        <ResponsiveContainer width="100%" height={chartHeight}>
+          <BarChart
+            layout="vertical"
+            data={chartData}
+            margin={{ top: 8, right: 48, left: 8, bottom: 4 }}
+            barCategoryGap="20%"
+            onClick={handleChartClick}
+          >
+            <defs>
+              <linearGradient id="gridGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#E2E8F0" stopOpacity={0.4} />
+                <stop offset="100%" stopColor="#E2E8F0" stopOpacity={0.1} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              horizontal={false}
+              stroke="url(#gridGrad)"
+              strokeDasharray="3 3"
+            />
+            <XAxis
+              type="number"
+              tick={{ fontSize: 12, fill: "#334155", fontWeight: 600, fontFamily: "Plus Jakarta Sans, sans-serif" }}
+              tickLine={false}
+              axisLine={{ stroke: "#E2E8F0", strokeWidth: 1 }}
+              allowDecimals={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="_name"
+              width={260}
+              tick={{ fontSize: 12, fill: "#0F172A", fontWeight: 500, fontFamily: "Plus Jakarta Sans, sans-serif" }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{ fill: "rgba(79,70,229,0.04)" }}
+              wrapperStyle={pinnedTooltip ? { visibility: "hidden" } : undefined}
+            />
 
-          {STATUS_CONFIG.map((s) => (
+            {STATUS_CONFIG.map((status) => (
               <Bar
-                key={s.key}
-                dataKey={s.key}
+                key={status.key}
+                dataKey={status.key}
                 stackId="a"
                 radius={[0, 0, 0, 0]}
               >
-                {chartData.map((_, idx) => (
-                  <Cell
-                    key={idx}
-                    fill={s.color}
-                    fillOpacity={0.9}
-                  />
+                {chartData.map((_, index) => (
+                  <Cell key={index} fill={status.color} fillOpacity={0.9} />
                 ))}
               </Bar>
-          ))}
-        </BarChart>
-      </ResponsiveContainer>
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+
+        {pinnedTooltip && (
+          <div
+            data-pinned-tooltip
+            className="pointer-events-auto absolute z-50"
+            style={{ left: pinnedTooltip.x, top: pinnedTooltip.y }}
+          >
+            <TooltipContent
+              name={pinnedTooltip.data.departmentName}
+              total={pinnedTooltip.data.total}
+              rate={getCompletionRate(pinnedTooltip.data)}
+              row={pinnedTooltip.data}
+              onViewDetail={() => router.push(buildDetailUrl(pinnedTooltip.data.departmentId))}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

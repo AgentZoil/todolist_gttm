@@ -167,6 +167,12 @@ export default function TasksPage() {
   };
 
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlDeptId = urlParams.get("departmentId") || "";
+    const urlStatus = urlParams.get("status") || "";
+    const urlDateFrom = urlParams.get("dateFrom") || "";
+    const urlDateTo = urlParams.get("dateTo") || "";
+
     apiFetch<{ data: UserInfo }>("/auth/me")
       .then((res) => {
         setUserInfo(res.data);
@@ -181,10 +187,20 @@ export default function TasksPage() {
       .then(([user, depts]) => {
         if (depts && depts.length > 0) {
           const sortedDepts = [...depts].sort((a, b) => a.id.localeCompare(b.id));
-          const defaultDept = user.departmentId || sortedDepts[0].id;
+          const defaultDept = urlDeptId || user.departmentId || sortedDepts[0].id;
+          setFilterStatus(urlStatus);
+          setFilterDateFrom(urlDateFrom);
+          setFilterDateTo(urlDateTo);
+          setTempDateFrom(urlDateFrom);
+          setTempDateTo(urlDateTo);
           setFilterDepartment(defaultDept);
           setFormData((prev) => ({ ...prev, ownerDepartmentId: defaultDept }));
-          return fetchTasks({ deptId: defaultDept });
+          return fetchTasks({
+            deptId: defaultDept,
+            status: urlStatus || undefined,
+            dateFrom: urlDateFrom || undefined,
+            dateTo: urlDateTo || undefined,
+          });
         }
       })
       .catch((err) => setError(err.message))
