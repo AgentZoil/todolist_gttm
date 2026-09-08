@@ -129,7 +129,7 @@ export default function DashboardPage() {
       glowColor: "hover:shadow-blue-500/20",
     },
     {
-      label: "Quá hạn",
+      label: "Không hoàn thành",
       value: totals.inProgressLate,
       icon: CalendarX,
       gradient: "from-red-500/20 to-red-500/5",

@@ -31,6 +31,7 @@ interface DepartmentStats {
 interface ChartDataRow {
   _id: string;
   _name: string;
+  _displayName: string;
   total: number;
   completedOnTime: number;
   completedLate: number;
@@ -199,9 +200,10 @@ export function DepartmentStatusChart({
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [pinnedTooltip, setPinnedTooltip] = useState<StaticTooltip | null>(null);
 
-  const chartData: ChartDataRow[] = data.map((department) => ({
+  const chartData: ChartDataRow[] = data.map((department, index) => ({
     _id: department.departmentId,
     _name: department.departmentName,
+    _displayName: `${index + 1}. ${department.departmentName}`,
     total: department.total,
     completedOnTime: department.completedOnTime,
     completedLate: department.completedLate,
@@ -236,7 +238,10 @@ export function DepartmentStatusChart({
       : Number(state.activeTooltipIndex);
     const department = Number.isInteger(index) && index >= 0
       ? data[index]
-      : data.find((item) => item.departmentName === state.activeLabel);
+      : data.find((item, itemIndex) =>
+          item.departmentName === state.activeLabel ||
+          `${itemIndex + 1}. ${item.departmentName}` === state.activeLabel,
+        );
     if (!department) return;
 
     const position = getStaticPosition(
@@ -266,7 +271,7 @@ export function DepartmentStatusChart({
   const chartHeight = Math.max(Math.round(chartData.length * 32 * 0.75) + 30, 200);
 
   return (
-    <div className="rounded-2xl border border-border/40 bg-card p-6 shadow-[0_4px_20px_-2px_rgba(79,70,229,0.08)] transition-shadow duration-300 hover:shadow-[0_10px_25px_-5px_rgba(79,70,229,0.12)]">
+    <div className="chart-without-outline rounded-2xl bg-card p-6 shadow-none">
       <div className="mb-5 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary shadow-[0_4px_12px_0_rgba(79,70,229,0.25)]">
           <BarChart3 className="h-5 w-5 text-white" />
@@ -296,6 +301,7 @@ export function DepartmentStatusChart({
           <BarChart
             layout="vertical"
             data={chartData}
+            accessibilityLayer={false}
             margin={{ top: 8, right: 48, left: 8, bottom: 4 }}
             barCategoryGap="20%"
             onClick={handleChartClick}
@@ -320,8 +326,8 @@ export function DepartmentStatusChart({
             />
             <YAxis
               type="category"
-              dataKey="_name"
-              width={260}
+              dataKey="_displayName"
+              width={280}
               tick={{ fontSize: 12, fill: "#0F172A", fontWeight: 500, fontFamily: "Plus Jakarta Sans, sans-serif" }}
               tickLine={false}
               axisLine={false}
