@@ -278,7 +278,7 @@ export function DepartmentStatusChart({
         </div>
         <div className="flex-1">
           <h3 className="text-sm font-bold tracking-tight text-foreground">
-            Biểu đồ tổng hợp theo phòng ban
+            Biểu đồ tổng hợp theo phòng ban/đơn vị
           </h3>
           <p className="mt-0.5 text-xs text-muted-foreground">Phân bổ trạng thái nhiệm vụ</p>
         </div>

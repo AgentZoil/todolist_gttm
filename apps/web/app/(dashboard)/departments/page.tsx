@@ -55,7 +55,7 @@ export default function DepartmentsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Phòng ban/Đơn vị</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Quản lý {departments.length} phòng ban · {activeCount} đang hoạt động
+          Quản lý {departments.length} phòng ban/đơn vị · {activeCount} đang hoạt động
         </p>
       </div>
 

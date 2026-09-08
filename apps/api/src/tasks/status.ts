@@ -1,6 +1,7 @@
 export type TaskStatus =
   | 'CANCELLED'
   | 'IN_PROGRESS'
+  | 'INCOMPLETE'
   | 'COMPLETED_EARLY'
   | 'COMPLETED_ON_TIME'
   | 'COMPLETED_LATE'
@@ -10,6 +11,27 @@ export interface TaskStatusInput {
   isCancelled: boolean;
   requiredCompletionDate: Date | null;
   actualCompletionDate: Date | null;
+  now?: Date;
+}
+
+export function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+export function endOfDay(date: Date): Date {
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+    23,
+    59,
+    59,
+    999,
+  );
+}
+
+export function isPastDeadline(requiredCompletionDate: Date, now = new Date()): boolean {
+  return now.getTime() > endOfDay(requiredCompletionDate).getTime();
 }
 
 export function calculateTaskStatus(task: TaskStatusInput): TaskStatus {
@@ -22,7 +44,9 @@ export function calculateTaskStatus(task: TaskStatusInput): TaskStatus {
   }
 
   if (task.actualCompletionDate === null) {
-    return 'IN_PROGRESS';
+    return isPastDeadline(task.requiredCompletionDate, task.now)
+      ? 'INCOMPLETE'
+      : 'IN_PROGRESS';
   }
 
   const required = task.requiredCompletionDate.getTime();
@@ -43,6 +67,7 @@ export function getStatusLabel(status: TaskStatus): string {
   const labels: Record<TaskStatus, string> = {
     CANCELLED: 'Đã hủy',
     IN_PROGRESS: 'Đang thực hiện',
+    INCOMPLETE: 'Không hoàn thành',
     COMPLETED_EARLY: 'Hoàn thành trước hạn',
     COMPLETED_ON_TIME: 'Hoàn thành đúng hạn',
     COMPLETED_LATE: 'Hoàn thành quá hạn',
@@ -56,6 +81,8 @@ export function getStatusColor(status: TaskStatus): string {
     CANCELLED: 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     IN_PROGRESS:
       'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    INCOMPLETE:
+      'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400',
     COMPLETED_EARLY:
       'bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400',
     COMPLETED_ON_TIME:

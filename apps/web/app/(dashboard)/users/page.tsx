@@ -38,7 +38,7 @@ const ROLE_BADGE: Record<string, string> = {
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   SECRETARY: "Thư ký",
-  DEPARTMENT_EDITOR: "Phụ trách phòng ban",
+  DEPARTMENT_EDITOR: "Phụ trách phòng ban/đơn vị",
   VIEWER: "Người xem",
 };
 
@@ -244,7 +244,7 @@ export default function UsersPage() {
                     className={INPUT_CLASS}
                     required
                   >
-                    <option value="">-- Chọn phòng ban --</option>
+                    <option value="">-- Chọn phòng ban/đơn vị --</option>
                     {departments.map((dept) => (
                       <option key={dept.id} value={dept.id}>
                         {dept.name}

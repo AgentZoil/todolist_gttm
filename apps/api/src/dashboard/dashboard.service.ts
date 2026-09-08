@@ -90,7 +90,7 @@ export class DashboardService {
       (t) => t.status === 'IN_PROGRESS',
     ).length;
     const overdue = enrichedTasks.filter(
-      (t) => t.status === 'COMPLETED_LATE',
+      (t) => t.status === 'INCOMPLETE',
     ).length;
     const noEvaluation = enrichedTasks.filter(
       (t) => t.status === 'NO_EVALUATION',
@@ -181,18 +181,11 @@ export class DashboardService {
       const completedLate = enrichedTasks.filter(
         (t) => t.status === 'COMPLETED_LATE',
       ).length;
-      const now = new Date();
       const inProgressOnTime = enrichedTasks.filter(
-        (t) =>
-          t.status === 'IN_PROGRESS' &&
-          t.requiredCompletionDate &&
-          t.requiredCompletionDate > now,
+        (t) => t.status === 'IN_PROGRESS',
       ).length;
       const inProgressLate = enrichedTasks.filter(
-        (t) =>
-          t.status === 'IN_PROGRESS' &&
-          t.requiredCompletionDate &&
-          t.requiredCompletionDate <= now,
+        (t) => t.status === 'INCOMPLETE',
       ).length;
       const noEvaluation = enrichedTasks.filter(
         (t) => t.status === 'NO_EVALUATION',

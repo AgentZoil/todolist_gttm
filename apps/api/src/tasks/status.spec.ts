@@ -28,13 +28,24 @@ describe('calculateTaskStatus', () => {
     expect(calculateTaskStatus(task)).toBe('NO_EVALUATION');
   });
 
-  it('should return IN_PROGRESS when actualCompletionDate is null', () => {
+  it('should return IN_PROGRESS through the required completion date', () => {
     const task: TaskStatusInput = {
       isCancelled: false,
-      requiredCompletionDate: new Date('2026-08-20'),
+      requiredCompletionDate: new Date(2026, 7, 20),
       actualCompletionDate: null,
+      now: new Date(2026, 7, 20, 23, 59, 59, 999),
     };
     expect(calculateTaskStatus(task)).toBe('IN_PROGRESS');
+  });
+
+  it('should return INCOMPLETE after the required completion date', () => {
+    const task: TaskStatusInput = {
+      isCancelled: false,
+      requiredCompletionDate: new Date(2026, 7, 7),
+      actualCompletionDate: null,
+      now: new Date(2026, 7, 12),
+    };
+    expect(calculateTaskStatus(task)).toBe('INCOMPLETE');
   });
 
   it('should return COMPLETED_EARLY when actual < required', () => {

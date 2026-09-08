@@ -78,11 +78,40 @@ interface UserInfo {
 const STATUS_COLORS: Record<string, string> = {
   CANCELLED: "bg-red-50 text-red-700",
   IN_PROGRESS: "bg-blue-50 text-blue-700",
+  INCOMPLETE: "bg-red-50 text-red-700",
   COMPLETED_EARLY: "bg-green-50 text-green-700",
   COMPLETED_ON_TIME: "bg-emerald-50 text-emerald-700",
   COMPLETED_LATE: "bg-orange-50 text-orange-700",
   NO_EVALUATION: "bg-gray-100 text-gray-600",
 };
+
+function getTodayInputValue() {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const day = String(today.getDate()).padStart(2, "0");
+  return `${today.getFullYear()}-${month}-${day}`;
+}
+
+function getActualCompletionMin(requiredCompletionDate: string) {
+  const today = getTodayInputValue();
+  return requiredCompletionDate && requiredCompletionDate < today ? today : undefined;
+}
+
+function getEditFormData(task: Task): Record<string, string> {
+  return {
+    title: task.title || "",
+    content: task.content || "",
+    source: task.source || "",
+    assignedBy: task.assignedBy || "",
+    assignedDate: task.assignedDate?.split("T")[0] || "",
+    documentNumber: task.documentNumber || "",
+    requiredCompletionDate: task.requiredCompletionDate?.split("T")[0] || "",
+    actualCompletionDate: task.actualCompletionDate?.split("T")[0] || "",
+    completionEvidence: task.completionEvidence || "",
+    incompleteReason: task.incompleteReason || "",
+    coordinatingUnits: task.coordinatingUnits || "",
+  };
+}
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -100,6 +129,7 @@ export default function TasksPage() {
   const [editingDetail, setEditingDetail] = useState(false);
   const [editFormData, setEditFormData] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  const [unsavedAction, setUnsavedAction] = useState<"close" | "cancel-edit" | null>(null);
   const [filterDepartment, setFilterDepartment] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -131,6 +161,10 @@ export default function TasksPage() {
   const canEditDetail = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY" ||
     (userInfo?.role === "DEPARTMENT_EDITOR" && detailTask?.ownerDepartment?.id === userInfo?.departmentId);
   const canDeleteDetail = canEditDetail && (!detailTask?.isFinalized || userInfo?.role === "ADMIN");
+  const originalEditFormData = detailTask ? getEditFormData(detailTask) : {};
+  const hasUnsavedChanges = editingDetail && Object.keys(originalEditFormData).some(
+    (key) => editFormData[key] !== originalEditFormData[key],
+  );
 
   const fetchTasks = (params: {
     deptId?: string;
@@ -376,24 +410,12 @@ export default function TasksPage() {
 
   const handleStartEdit = () => {
     if (!detailTask) return;
-    setEditFormData({
-      title: detailTask.title || "",
-      content: detailTask.content || "",
-      source: detailTask.source || "",
-      assignedBy: detailTask.assignedBy || "",
-      assignedDate: detailTask.assignedDate?.split("T")[0] || "",
-      documentNumber: detailTask.documentNumber || "",
-      requiredCompletionDate: detailTask.requiredCompletionDate?.split("T")[0] || "",
-      actualCompletionDate: detailTask.actualCompletionDate?.split("T")[0] || "",
-      completionEvidence: detailTask.completionEvidence || "",
-      incompleteReason: detailTask.incompleteReason || "",
-      coordinatingUnits: detailTask.coordinatingUnits || "",
-    });
+    setEditFormData(getEditFormData(detailTask));
     setEditingDetail(true);
   };
 
-  const handleSaveDetail = async () => {
-    if (!detailTask) return;
+  const handleSaveDetail = async (closeAfterSave = true) => {
+    if (!detailTask) return false;
     const requiredFields = [
       { key: "title", label: "Tiêu đề nhiệm vụ" },
       { key: "content", label: "Nội dung nhiệm vụ" },
@@ -408,7 +430,7 @@ export default function TasksPage() {
         setValidationMsg(`${field.label} không được để trống`);
         setTimeout(() => setValidationMsg(null), 8000);
         setSavingEdit(false);
-        return;
+        return false;
       }
     }
     const assignedDate = editFormData.assignedDate || detailTask.assignedDate?.split("T")[0];
@@ -417,7 +439,7 @@ export default function TasksPage() {
         setValidationMsg("Ngày yêu cầu hoàn thành không được sớm hơn ngày giao nhiệm vụ");
         setTimeout(() => setValidationMsg(null), 8000);
         setSavingEdit(false);
-        return;
+        return false;
       }
     }
     if (assignedDate && editFormData.actualCompletionDate) {
@@ -425,7 +447,7 @@ export default function TasksPage() {
         setValidationMsg("Ngày hoàn thành thực tế không được sớm hơn ngày giao nhiệm vụ");
         setTimeout(() => setValidationMsg(null), 8000);
         setSavingEdit(false);
-        return;
+        return false;
       }
     }
     setSavingEdit(true);
@@ -449,14 +471,52 @@ export default function TasksPage() {
       });
       setDetailTask(res.data);
       setEditingDetail(false);
-      setSelectedTask(null);
+      if (closeAfterSave) setSelectedTask(null);
       await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
+      return true;
     } catch (err: any) {
       setValidationMsg("Lỗi lưu: " + err.message);
       setTimeout(() => setValidationMsg(null), 8000);
+      return false;
     } finally {
       setSavingEdit(false);
     }
+  };
+
+  const closeDetail = () => {
+    setSelectedTask(null);
+    setDetailTask(null);
+    setEditingDetail(false);
+    setEditFormData({});
+  };
+
+  const requestCloseDetail = () => {
+    if (hasUnsavedChanges) {
+      setUnsavedAction("close");
+      return;
+    }
+    closeDetail();
+  };
+
+  const requestCancelEdit = () => {
+    if (hasUnsavedChanges) {
+      setUnsavedAction("cancel-edit");
+      return;
+    }
+    setEditingDetail(false);
+  };
+
+  const discardUnsavedChanges = () => {
+    const action = unsavedAction;
+    setUnsavedAction(null);
+    setEditFormData({});
+    if (action === "close") closeDetail();
+    if (action === "cancel-edit") setEditingDetail(false);
+  };
+
+  const saveUnsavedChanges = async () => {
+    const saved = await handleSaveDetail(unsavedAction === "close");
+    if (saved) setUnsavedAction(null);
   };
 
   const formatDate = (date: string) => {
@@ -549,7 +609,7 @@ export default function TasksPage() {
             <ListTodo className="h-6 w-6 text-primary" />
             Nhiệm vụ
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Quản lý nhiệm vụ theo phòng ban</p>
+          <p className="text-sm text-muted-foreground mt-1">Quản lý nhiệm vụ theo phòng ban/đơn vị</p>
         </div>
         <div className="flex items-center gap-2.5">
           <form onSubmit={handleSearch} className="relative">
@@ -596,6 +656,7 @@ export default function TasksPage() {
         >
           <option value="">Tất cả trạng thái</option>
           <option value="IN_PROGRESS">Đang thực hiện</option>
+          <option value="INCOMPLETE">Không hoàn thành</option>
           <option value="COMPLETED_EARLY">Hoàn thành trước hạn</option>
           <option value="COMPLETED_ON_TIME">Hoàn thành đúng hạn</option>
           <option value="COMPLETED_LATE">Hoàn thành quá hạn</option>
@@ -829,7 +890,7 @@ export default function TasksPage() {
                       className="h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                       required
                     >
-                      <option value="">Chọn phòng ban</option>
+                      <option value="">Chọn phòng ban/đơn vị</option>
                       {[...departments].sort((a, b) => a.id.localeCompare(b.id)).map((dept, i) => (
                         <option key={dept.id} value={dept.id}>
                           {i + 1}. {dept.name}
@@ -888,7 +949,7 @@ export default function TasksPage() {
       {/* Detail modal */}
       {selectedTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }} />
+          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={requestCloseDetail} />
           <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-5xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-semibold text-foreground">
@@ -900,14 +961,14 @@ export default function TasksPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setEditingDetail(false)}
+                      onClick={requestCancelEdit}
                       disabled={savingEdit}
                     >
                       Hủy
                     </Button>
                     <Button
                       size="sm"
-                      onClick={handleSaveDetail}
+                      onClick={() => handleSaveDetail()}
                       disabled={savingEdit}
                     >
                       {savingEdit && (
@@ -961,7 +1022,7 @@ export default function TasksPage() {
                       </>
                     )}
                     <button
-                      onClick={() => { setSelectedTask(null); setDetailTask(null); setEditingDetail(false); }}
+                      onClick={requestCloseDetail}
                       className="text-muted-foreground hover:text-foreground"
                     >
                       <X className="h-5 w-5" />
@@ -1110,7 +1171,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày hoàn thành thực tế</label>
                         {editingDetail ? (
-                          <input type="date" max={new Date().toISOString().split("T")[0]} value={editFormData.actualCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, actualCompletionDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
+                          <input type="date" min={getActualCompletionMin(editFormData.requiredCompletionDate)} value={editFormData.actualCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, actualCompletionDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.actualCompletionDate ? formatDate(detailTask.actualCompletionDate) : "—"}</p>
                         )}
@@ -1136,6 +1197,51 @@ export default function TasksPage() {
 
                 </div>
               ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {unsavedAction && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="unsaved-changes-title"
+            className="relative mx-4 w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
+          >
+            <h3 id="unsaved-changes-title" className="text-lg font-semibold text-foreground">
+              Có thay đổi chưa lưu
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Bạn có muốn lưu những thay đổi trước khi thoát không?
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setUnsavedAction(null)}
+                disabled={savingEdit}
+              >
+                Tiếp tục chỉnh sửa
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={discardUnsavedChanges}
+                disabled={savingEdit}
+              >
+                Bỏ thay đổi
+              </Button>
+              <Button
+                type="button"
+                onClick={saveUnsavedChanges}
+                disabled={savingEdit}
+              >
+                {savingEdit && <Loader2 className="h-3 w-3 animate-spin" />}
+                {unsavedAction === "close" ? "Lưu và đóng" : "Lưu thay đổi"}
+              </Button>
             </div>
           </div>
         </div>

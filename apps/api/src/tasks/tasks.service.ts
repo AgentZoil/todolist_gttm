@@ -7,7 +7,13 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PeriodLockService } from '../period-lock/period-lock.service';
-import { calculateTaskStatus, getStatusLabel, getStatusColor } from './status';
+import {
+  calculateTaskStatus,
+  getStatusLabel,
+  getStatusColor,
+  isPastDeadline,
+  startOfDay,
+} from './status';
 
 const NHOM_A_FIELDS = [
   'content',
@@ -83,10 +89,13 @@ export class TasksService {
       });
     }
     if (status) {
-      if (status === 'IN_PROGRESS') {
+      if (status === 'IN_PROGRESS' || status === 'INCOMPLETE') {
+        const today = startOfDay(new Date());
         where.isCancelled = false;
         where.actualCompletionDate = null;
-        where.requiredCompletionDate = { not: null };
+        where.requiredCompletionDate = status === 'IN_PROGRESS'
+          ? { not: null, gte: today }
+          : { not: null, lt: today };
       } else if (status === 'COMPLETED_EARLY' || status === 'COMPLETED_ON_TIME' || status === 'COMPLETED_LATE') {
         where.isCancelled = false;
         where.actualCompletionDate = { not: null };
@@ -375,9 +384,23 @@ export class TasksService {
       );
     }
 
-    if (actualCompletionDate && actualCompletionDate > new Date()) {
+    const isNewActualCompletionDate =
+      data.actualCompletionDate !== undefined &&
+      data.actualCompletionDate !== null &&
+      data.actualCompletionDate !== '' &&
+      (!oldTask.actualCompletionDate ||
+        new Date(data.actualCompletionDate).getTime() !==
+          oldTask.actualCompletionDate.getTime());
+    if (
+      isNewActualCompletionDate &&
+      oldTask.actualCompletionDate === null &&
+      requiredCompletionDate &&
+      actualCompletionDate &&
+      isPastDeadline(requiredCompletionDate) &&
+      actualCompletionDate < startOfDay(new Date())
+    ) {
       throw new ForbiddenException(
-        'Ngày hoàn thành thực tế không được lớn hơn ngày hiện tại',
+        'Nhiệm vụ đã quá hạn, ngày hoàn thành thực tế không được sớm hơn ngày hiện tại',
       );
     }
 

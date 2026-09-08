@@ -194,7 +194,7 @@ export default function PeriodLocksPage() {
               </li>
             </ul>
             <p className="text-xs text-muted-foreground mt-3 pt-2 border-t border-border/40">
-              <span className="font-medium">Lưu ý:</span> Admin vẫn chỉnh sửa được tất cả. Thư ký bị hạn chế tương tự Phụ trách phòng ban.
+              <span className="font-medium">Lưu ý:</span> Admin vẫn chỉnh sửa được tất cả. Thư ký bị hạn chế tương tự Phụ trách phòng ban/đơn vị.
             </p>
           </div>
         </div>
