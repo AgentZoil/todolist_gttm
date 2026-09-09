@@ -33,6 +33,41 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+DO $$
+BEGIN
+  CREATE TYPE "TaskPriority" AS ENUM ('URGENT', 'NORMAL');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "TaskApprovalStatus" AS ENUM ('NOT_SUBMITTED', 'PENDING', 'APPROVED', 'NEEDS_REVISION');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "TaskOfficialStatus" AS ENUM ('CANCELLED', 'IN_PROGRESS', 'INCOMPLETE', 'COMPLETED_EARLY', 'COMPLETED_ON_TIME', 'COMPLETED_LATE', 'NO_EVALUATION');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "TaskFeedbackType" AS ENUM ('DIRECTIVE', 'REVIEW');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  CREATE TYPE "TaskFeedbackDecision" AS ENUM ('APPROVED', 'NEEDS_REVISION');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
 -- Tasks
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -42,6 +77,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   source TEXT NOT NULL,
   assigned_date TIMESTAMPTZ NOT NULL,
   assigned_by TEXT NOT NULL,
+  priority "TaskPriority" NOT NULL DEFAULT 'NORMAL',
   document_number TEXT,
   coordinating_units TEXT,
   owner_department_id TEXT NOT NULL REFERENCES departments(id),
@@ -50,6 +86,10 @@ CREATE TABLE IF NOT EXISTS tasks (
   completion_evidence TEXT,
   incomplete_reason TEXT,
   is_cancelled BOOLEAN NOT NULL DEFAULT false,
+  approval_status "TaskApprovalStatus" NOT NULL DEFAULT 'NOT_SUBMITTED',
+  approved_status "TaskOfficialStatus",
+  approved_at TIMESTAMPTZ,
+  approved_by TEXT,
   cancelled_at TIMESTAMPTZ,
   cancelled_by TEXT,
   is_finalized BOOLEAN NOT NULL DEFAULT false,
@@ -91,6 +131,18 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS task_feedbacks (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  author_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  type "TaskFeedbackType" NOT NULL,
+  decision "TaskFeedbackDecision",
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_feedbacks_task_created_at ON task_feedbacks(task_id, created_at);
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
@@ -116,6 +168,11 @@ CREATE TABLE IF NOT EXISTS period_locks (
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS coordinating_units TEXT;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS incomplete_reason TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority "TaskPriority" NOT NULL DEFAULT 'NORMAL';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approval_status "TaskApprovalStatus" NOT NULL DEFAULT 'NOT_SUBMITTED';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approved_status "TaskOfficialStatus";
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS approved_by TEXT;
 
 -- 2. Make users.department_id nullable (Admin users may not belong to any department)
 -- First drop the FK, alter column, then re-add FK with SET NULL on delete

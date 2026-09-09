@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { PeriodLockService } from '../period-lock/period-lock.service';
+import { DashboardService } from '../dashboard/dashboard.service';
 import {
   calculateTaskStatus,
   getStatusLabel,
@@ -27,12 +28,24 @@ const NHOM_A_FIELDS = [
 
 const NHOM_B_FIELDS = ['actualCompletionDate', 'completionEvidence', 'incompleteReason'];
 
+const APPROVAL_STATUS_LABELS: Record<string, string> = {
+  NOT_SUBMITTED: 'Chưa gửi',
+  PENDING: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  NEEDS_REVISION: 'Cần bổ sung',
+};
+
+const COMPLETION_FIELDS = ['actualCompletionDate', 'completionEvidence'];
+const REVISION_EDITABLE_FIELDS = new Set(COMPLETION_FIELDS);
+const DEPARTMENT_EDITOR_EDITABLE_FIELDS = new Set(COMPLETION_FIELDS);
+
 @Injectable()
 export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLogService: AuditLogService,
     private readonly periodLockService: PeriodLockService,
+    private readonly dashboardService: DashboardService,
   ) {}
 
   private enrichTask(task: any) {
@@ -46,6 +59,9 @@ export class TasksService {
       status,
       statusLabel: getStatusLabel(status),
       statusColor: getStatusColor(status),
+      approvalStatusLabel: task.approvalStatus
+        ? APPROVAL_STATUS_LABELS[task.approvalStatus]
+        : undefined,
     };
   }
 
@@ -142,12 +158,17 @@ export class TasksService {
           source: true,
           assignedDate: true,
           assignedBy: true,
+          priority: true,
           documentNumber: true,
           coordinatingUnits: true,
           requiredCompletionDate: true,
           actualCompletionDate: true,
           isCancelled: true,
           isFinalized: true,
+          approvalStatus: true,
+          approvedStatus: true,
+          approvedAt: true,
+          approvedBy: true,
           version: true,
           createdAt: true,
           ownerDepartment: {
@@ -189,6 +210,122 @@ export class TasksService {
     };
   }
 
+  async findPendingApprovals(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  } = {}) {
+    const { page = 1, limit = 20, search } = params;
+    const where: any = {
+      approvalStatus: 'PENDING',
+      isCancelled: false,
+    };
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { taskCode: { contains: search, mode: 'insensitive' } },
+        { source: { contains: search, mode: 'insensitive' } },
+        { ownerDepartment: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const [tasks, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        select: {
+          id: true,
+          taskCode: true,
+          title: true,
+          source: true,
+          assignedBy: true,
+          priority: true,
+          requiredCompletionDate: true,
+          actualCompletionDate: true,
+          completionEvidence: true,
+          approvalStatus: true,
+          approvedStatus: true,
+          approvedAt: true,
+          approvedBy: true,
+          isCancelled: true,
+          isFinalized: true,
+          version: true,
+          createdAt: true,
+          updatedAt: true,
+          ownerDepartment: {
+            select: { id: true, code: true, name: true },
+          },
+          creator: {
+            select: { id: true, fullName: true },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
+
+    return {
+      data: tasks.map((task) => this.enrichTask(task)),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async findDepartmentAttention(departmentId: string) {
+    const where: any = {
+      ownerDepartmentId: departmentId,
+      isCancelled: false,
+      OR: [
+        { approvalStatus: 'NEEDS_REVISION' },
+        { feedbacks: { some: { type: 'DIRECTIVE' } } },
+      ],
+    };
+
+    const tasks = await this.prisma.task.findMany({
+      where,
+      select: {
+        id: true,
+        taskCode: true,
+        title: true,
+        requiredCompletionDate: true,
+        actualCompletionDate: true,
+        approvalStatus: true,
+        updatedAt: true,
+        ownerDepartment: {
+          select: { id: true, code: true, name: true },
+        },
+        feedbacks: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            type: true,
+            decision: true,
+            content: true,
+            createdAt: true,
+            author: { select: { id: true, fullName: true } },
+          },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return {
+      data: tasks.map((task) => this.enrichTask(task)),
+      pagination: {
+        page: 1,
+        limit: tasks.length,
+        total: tasks.length,
+        totalPages: tasks.length > 0 ? 1 : 0,
+      },
+    };
+  }
+
   async findOne(id: string) {
     const task = await this.prisma.task.findUnique({
       where: { id },
@@ -200,16 +337,22 @@ export class TasksService {
         source: true,
         assignedDate: true,
         assignedBy: true,
+        priority: true,
         documentNumber: true,
         requiredCompletionDate: true,
         actualCompletionDate: true,
         completionEvidence: true,
         incompleteReason: true,
         coordinatingUnits: true,
+        ownerDepartmentId: true,
         isCancelled: true,
         cancelledAt: true,
         cancelledBy: true,
         isFinalized: true,
+        approvalStatus: true,
+        approvedStatus: true,
+        approvedAt: true,
+        approvedBy: true,
         finalizedAt: true,
         finalizedBy: true,
         version: true,
@@ -231,6 +374,17 @@ export class TasksService {
             department: { select: { id: true, code: true, name: true } },
           },
         },
+        feedbacks: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            type: true,
+            decision: true,
+            content: true,
+            createdAt: true,
+            author: { select: { id: true, fullName: true } },
+          },
+        },
       },
     });
     return task ? this.enrichTask(task) : null;
@@ -242,6 +396,7 @@ export class TasksService {
     source: string;
     assignedDate: string;
     assignedBy: string;
+    priority?: 'URGENT' | 'NORMAL';
     documentNumber?: string;
     coordinatingUnits?: string;
     ownerDepartmentId: string;
@@ -269,6 +424,7 @@ export class TasksService {
         source: data.source,
         assignedDate: new Date(data.assignedDate),
         assignedBy: data.assignedBy,
+        priority: data.priority ?? 'NORMAL',
         documentNumber: data.documentNumber,
         coordinatingUnits: data.coordinatingUnits,
         ownerDepartmentId: data.ownerDepartmentId,
@@ -336,6 +492,7 @@ export class TasksService {
       source?: string;
       assignedDate?: string;
       assignedBy?: string;
+      priority?: 'URGENT' | 'NORMAL';
       documentNumber?: string;
       ownerDepartmentId?: string;
       requiredCompletionDate?: string;
@@ -350,6 +507,54 @@ export class TasksService {
   ) {
     const oldTask = await this.prisma.task.findUnique({ where: { id } });
     if (!oldTask) throw new NotFoundException('Task not found');
+
+    const hasActualDateInput = Object.prototype.hasOwnProperty.call(
+      data,
+      'actualCompletionDate',
+    );
+    const nextActualCompletionDate = hasActualDateInput
+      ? data.actualCompletionDate
+        ? new Date(data.actualCompletionDate)
+        : null
+      : oldTask.actualCompletionDate;
+    const completionFieldsChanged =
+      (hasActualDateInput &&
+        (oldTask.actualCompletionDate?.getTime() ?? null) !==
+          (nextActualCompletionDate?.getTime() ?? null)) ||
+      (Object.prototype.hasOwnProperty.call(data, 'completionEvidence') &&
+        (data.completionEvidence || null) !== oldTask.completionEvidence);
+
+    if (oldTask.approvalStatus === 'NEEDS_REVISION') {
+      const changedFields = Object.keys(data).filter(
+        (field) =>
+          !['updatedBy', 'userRole', 'expectedVersion'].includes(field) &&
+          !REVISION_EDITABLE_FIELDS.has(field),
+      );
+      if (changedFields.length > 0) {
+        throw new ForbiddenException(
+          'Nhiệm vụ cần bổ sung chỉ được sửa ngày hoàn thành thực tế và bằng chứng',
+        );
+      }
+    }
+
+    if (data.userRole === 'DEPARTMENT_EDITOR') {
+      const changedFields = Object.keys(data).filter(
+        (field) =>
+          !['updatedBy', 'userRole', 'expectedVersion'].includes(field) &&
+          !DEPARTMENT_EDITOR_EDITABLE_FIELDS.has(field),
+      );
+      if (changedFields.length > 0) {
+        throw new ForbiddenException(
+          'Đại diện phòng ban chỉ được cập nhật ngày hoàn thành thực tế và bằng chứng',
+        );
+      }
+    }
+
+    if (oldTask.approvalStatus === 'APPROVED' && completionFieldsChanged) {
+      throw new ForbiddenException(
+        'Nhiệm vụ đã được duyệt, cần yêu cầu bổ sung trước khi chỉnh sửa',
+      );
+    }
 
     if (
       data.expectedVersion !== undefined &&
@@ -368,9 +573,7 @@ export class TasksService {
     const requiredCompletionDate = data.requiredCompletionDate
       ? new Date(data.requiredCompletionDate)
       : oldTask.requiredCompletionDate;
-    const actualCompletionDate = data.actualCompletionDate
-      ? new Date(data.actualCompletionDate)
-      : oldTask.actualCompletionDate;
+    const actualCompletionDate = nextActualCompletionDate;
 
     if (requiredCompletionDate && requiredCompletionDate < assignedDate) {
       throw new ForbiddenException(
@@ -410,10 +613,26 @@ export class TasksService {
       version: { increment: 1 },
     };
 
+    if (completionFieldsChanged) {
+      if (!oldTask.approvedStatus) {
+        prismaData.approvedStatus = calculateTaskStatus({
+          isCancelled: oldTask.isCancelled,
+          requiredCompletionDate: oldTask.requiredCompletionDate,
+          actualCompletionDate: oldTask.actualCompletionDate,
+        });
+      }
+      prismaData.approvalStatus = actualCompletionDate
+        ? 'PENDING'
+        : 'NOT_SUBMITTED';
+      prismaData.approvedAt = null;
+      prismaData.approvedBy = null;
+    }
+
     if (updateData.title !== undefined) prismaData.title = updateData.title;
     if (updateData.content !== undefined) prismaData.content = updateData.content;
     if (updateData.source !== undefined) prismaData.source = updateData.source;
     if (updateData.assignedBy !== undefined) prismaData.assignedBy = updateData.assignedBy;
+    if (updateData.priority !== undefined) prismaData.priority = updateData.priority;
     if (updateData.documentNumber !== undefined) prismaData.documentNumber = updateData.documentNumber;
     if (updateData.ownerDepartmentId !== undefined) prismaData.ownerDepartmentId = updateData.ownerDepartmentId;
     if (updateData.coordinatingUnits !== undefined) prismaData.coordinatingUnits = updateData.coordinatingUnits;
@@ -443,6 +662,7 @@ export class TasksService {
       include: {
         ownerDepartment: true,
         coordinatingDepts: { include: { department: true } },
+        updater: { select: { id: true, fullName: true } },
       },
     });
 
@@ -451,6 +671,7 @@ export class TasksService {
       'source',
       'assignedDate',
       'assignedBy',
+      'priority',
       'documentNumber',
       'ownerDepartmentId',
       'requiredCompletionDate',
@@ -484,7 +705,148 @@ export class TasksService {
       }
     }
 
+    this.dashboardService.invalidate();
+
     return updatedTask;
+  }
+
+  async approve(id: string, approvedBy: string) {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new NotFoundException('Task not found');
+    if (task.isCancelled) {
+      throw new ForbiddenException('Nhiệm vụ đã hủy, không thể duyệt');
+    }
+    if (task.approvalStatus === 'APPROVED') {
+      throw new ForbiddenException('Nhiệm vụ đã được duyệt');
+    }
+    if (task.approvalStatus !== 'PENDING') {
+      throw new ForbiddenException(
+        'Nhiệm vụ chưa có hồ sơ hoàn thành mới để duyệt',
+      );
+    }
+    if (!task.actualCompletionDate) {
+      throw new ForbiddenException(
+        'Chỉ được duyệt nhiệm vụ sau khi có ngày hoàn thành thực tế',
+      );
+    }
+
+    const status = calculateTaskStatus({
+      isCancelled: task.isCancelled,
+      requiredCompletionDate: task.requiredCompletionDate,
+      actualCompletionDate: task.actualCompletionDate,
+    });
+    const now = new Date();
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id },
+        data: {
+          approvalStatus: 'APPROVED',
+          approvedStatus: status,
+          approvedAt: now,
+          approvedBy,
+          version: { increment: 1 },
+        },
+      });
+      await tx.taskFeedback.create({
+        data: {
+          taskId: id,
+          authorId: approvedBy,
+          type: 'REVIEW',
+          decision: 'APPROVED',
+          content: 'Đã duyệt hoàn thành nhiệm vụ',
+        },
+      });
+    });
+
+    await this.auditLogService.log({
+      userId: approvedBy,
+      action: 'APPROVE_COMPLETION',
+      entityType: 'TASK',
+      entityId: id,
+    });
+
+    this.dashboardService.invalidate();
+    return this.findOne(id);
+  }
+
+  async requestRevision(id: string, requestedBy: string, content: string) {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new NotFoundException('Task not found');
+    if (task.isCancelled) {
+      throw new ForbiddenException('Nhiệm vụ đã hủy, không thể yêu cầu bổ sung');
+    }
+    if (task.approvalStatus === 'APPROVED') {
+      throw new ForbiddenException('Nhiệm vụ đã được duyệt');
+    }
+    if (task.approvalStatus !== 'PENDING') {
+      throw new ForbiddenException(
+        'Nhiệm vụ chưa có hồ sơ hoàn thành mới để phản hồi',
+      );
+    }
+    if (!task.actualCompletionDate) {
+      throw new ForbiddenException(
+        'Chỉ được yêu cầu bổ sung sau khi phòng ban đã nhập ngày hoàn thành thực tế',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id },
+        data: {
+          approvalStatus: 'NEEDS_REVISION',
+          version: { increment: 1 },
+        },
+      });
+      await tx.taskFeedback.create({
+        data: {
+          taskId: id,
+          authorId: requestedBy,
+          type: 'REVIEW',
+          decision: 'NEEDS_REVISION',
+          content,
+        },
+      });
+    });
+
+    await this.auditLogService.log({
+      userId: requestedBy,
+      action: 'REQUEST_COMPLETION_REVISION',
+      entityType: 'TASK',
+      entityId: id,
+    });
+
+    this.dashboardService.invalidate();
+    return this.findOne(id);
+  }
+
+  async addDirective(id: string, authorId: string, content: string) {
+    const task = await this.prisma.task.findUnique({ where: { id } });
+    if (!task) throw new NotFoundException('Task not found');
+
+    const feedback = await this.prisma.taskFeedback.create({
+      data: {
+        taskId: id,
+        authorId,
+        type: 'DIRECTIVE',
+        content,
+      },
+      select: {
+        id: true,
+        type: true,
+        decision: true,
+        content: true,
+        createdAt: true,
+        author: { select: { id: true, fullName: true } },
+      },
+    });
+    await this.auditLogService.log({
+      userId: authorId,
+      action: 'ADD_TASK_DIRECTIVE',
+      entityType: 'TASK',
+      entityId: id,
+    });
+    return feedback;
   }
 
   async cancel(id: string, cancelledBy: string) {

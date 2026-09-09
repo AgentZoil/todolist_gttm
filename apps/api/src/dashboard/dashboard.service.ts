@@ -30,6 +30,19 @@ export class DashboardService {
     });
   }
 
+  invalidate(): void {
+    this.cache.clear();
+  }
+
+  private getOfficialStatus(task: {
+    isCancelled: boolean;
+    requiredCompletionDate: Date | null;
+    actualCompletionDate: Date | null;
+    approvedStatus: string | null;
+  }) {
+    return task.approvedStatus ?? calculateTaskStatus(task);
+  }
+
   async getSummary(month?: string) {
     const targetMonth =
       month ||
@@ -39,7 +52,6 @@ export class DashboardService {
     if (cached) return cached;
 
     const [year, monthNum] = targetMonth.split('-').map(Number);
-
     const startDate = new Date(year, monthNum - 1, 1);
     const endDate = new Date(year, monthNum, 0, 23, 59, 59);
 
@@ -66,15 +78,12 @@ export class DashboardService {
         isCancelled: true,
         requiredCompletionDate: true,
         actualCompletionDate: true,
+        approvedStatus: true,
       },
     });
 
     const enrichedTasks = tasks.map((task) => {
-      const status = calculateTaskStatus({
-        isCancelled: task.isCancelled,
-        requiredCompletionDate: task.requiredCompletionDate,
-        actualCompletionDate: task.actualCompletionDate,
-      });
+      const status = this.getOfficialStatus(task);
       return { ...task, status };
     });
 
@@ -119,7 +128,6 @@ export class DashboardService {
     if (cached) return cached;
 
     const [year, monthNum] = targetMonth.split('-').map(Number);
-
     const startDate = new Date(year, monthNum - 1, 1);
     const endDate = new Date(year, monthNum, 0, 23, 59, 59);
 
@@ -152,6 +160,7 @@ export class DashboardService {
         isCancelled: true,
         requiredCompletionDate: true,
         actualCompletionDate: true,
+        approvedStatus: true,
       },
     });
 
@@ -165,11 +174,7 @@ export class DashboardService {
     const results = departments.map((dept) => {
       const deptTasks = deptTaskMap.get(dept.id) || [];
       const enrichedTasks = deptTasks.map((task) => {
-        const status = calculateTaskStatus({
-          isCancelled: task.isCancelled,
-          requiredCompletionDate: task.requiredCompletionDate,
-          actualCompletionDate: task.actualCompletionDate,
-        });
+        const status = this.getOfficialStatus(task);
         return { ...task, status };
       });
 

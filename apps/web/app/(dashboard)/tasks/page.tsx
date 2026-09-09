@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   ListTodo,
   Plus,
@@ -21,6 +23,11 @@ import {
   Calendar,
   Lock,
   Unlock,
+  Check,
+  Flag,
+  Circle,
+  Clock3,
+  MessageSquare,
 } from "lucide-react";
 
 interface Department {
@@ -31,12 +38,12 @@ interface Department {
 
 interface Task {
   id: string;
-  taskCode: string;
   title: string;
   content: string;
   source: string;
   assignedDate: string;
   assignedBy: string;
+  priority: "URGENT" | "NORMAL";
   documentNumber?: string;
   coordinatingUnits?: string;
   requiredCompletionDate?: string;
@@ -57,6 +64,18 @@ interface Task {
   status: string;
   statusLabel: string;
   statusColor: string;
+  approvalStatus: "NOT_SUBMITTED" | "PENDING" | "APPROVED" | "NEEDS_REVISION";
+  approvalStatusLabel?: string;
+  feedbacks?: TaskFeedback[];
+}
+
+interface TaskFeedback {
+  id: string;
+  type: "DIRECTIVE" | "REVIEW";
+  decision?: "APPROVED" | "NEEDS_REVISION";
+  content: string;
+  createdAt: string;
+  author: { id: string; fullName: string };
 }
 
 interface Pagination {
@@ -76,14 +95,186 @@ interface UserInfo {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  CANCELLED: "bg-red-50 text-red-700",
-  IN_PROGRESS: "bg-blue-50 text-blue-700",
-  INCOMPLETE: "bg-red-50 text-red-700",
-  COMPLETED_EARLY: "bg-green-50 text-green-700",
-  COMPLETED_ON_TIME: "bg-emerald-50 text-emerald-700",
-  COMPLETED_LATE: "bg-orange-50 text-orange-700",
-  NO_EVALUATION: "bg-gray-100 text-gray-600",
+  CANCELLED: "bg-red-50/80 text-red-700 ring-red-200/70",
+  IN_PROGRESS: "bg-blue-50/80 text-blue-700 ring-blue-200/70",
+  INCOMPLETE: "bg-red-50/80 text-red-700 ring-red-200/70",
+  COMPLETED_EARLY: "bg-emerald-50/80 text-emerald-700 ring-emerald-200/70",
+  COMPLETED_ON_TIME: "bg-emerald-50/80 text-emerald-700 ring-emerald-200/70",
+  COMPLETED_LATE: "bg-orange-50/80 text-orange-700 ring-orange-200/70",
+  NO_EVALUATION: "bg-muted/70 text-muted-foreground ring-border/70",
 };
+
+const STATUS_LABELS: Record<string, string> = {
+  CANCELLED: "Đã hủy",
+  IN_PROGRESS: "Đang thực hiện",
+  INCOMPLETE: "Không hoàn thành",
+  COMPLETED_EARLY: "Hoàn thành trước hạn",
+  COMPLETED_ON_TIME: "Hoàn thành đúng hạn",
+  COMPLETED_LATE: "Hoàn thành quá hạn",
+  NO_EVALUATION: "Không đánh giá",
+};
+
+const STATUS_ICONS: Record<string, LucideIcon> = {
+  CANCELLED: AlertCircle,
+  IN_PROGRESS: Clock3,
+  INCOMPLETE: AlertCircle,
+  COMPLETED_EARLY: CheckCircle2,
+  COMPLETED_ON_TIME: CheckCircle2,
+  COMPLETED_LATE: AlertCircle,
+  NO_EVALUATION: Calendar,
+};
+
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+function getLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function getDayDifference(later: Date, earlier: Date) {
+  return Math.round((getLocalDay(later).getTime() - getLocalDay(earlier).getTime()) / DAY_IN_MS);
+}
+
+function getRealtimeStatus(task: Pick<Task, "isCancelled" | "requiredCompletionDate" | "actualCompletionDate">, now: Date) {
+  if (task.isCancelled) return "CANCELLED";
+  if (!task.requiredCompletionDate) return "NO_EVALUATION";
+  if (!task.actualCompletionDate) {
+    const deadline = new Date(task.requiredCompletionDate);
+    const deadlineEnd = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate(), 23, 59, 59, 999);
+    return now.getTime() > deadlineEnd.getTime() ? "INCOMPLETE" : "IN_PROGRESS";
+  }
+
+  const difference = getDayDifference(new Date(task.actualCompletionDate), new Date(task.requiredCompletionDate));
+  if (difference < 0) return "COMPLETED_EARLY";
+  if (difference === 0) return "COMPLETED_ON_TIME";
+  return "COMPLETED_LATE";
+}
+
+function getDeadlineSummary(task: Pick<Task, "isCancelled" | "requiredCompletionDate" | "actualCompletionDate">, now: Date) {
+  if (task.isCancelled) {
+    return { label: "Đã hủy", className: "text-muted-foreground" };
+  }
+  if (!task.requiredCompletionDate) {
+    return null;
+  }
+
+  const requiredDate = new Date(task.requiredCompletionDate);
+  if (!task.actualCompletionDate) {
+    const days = getDayDifference(requiredDate, now);
+    if (days > 0) return { label: `Còn ${days} ngày`, className: "text-blue-600" };
+    if (days === 0) return { label: "Hôm nay", className: "text-blue-600" };
+    return { label: `Trễ ${Math.abs(days)} ngày`, className: "text-destructive" };
+  }
+
+  const days = getDayDifference(requiredDate, new Date(task.actualCompletionDate));
+  if (days > 0) return { label: `Sớm ${days} ngày`, className: "text-emerald-600" };
+  if (days === 0) return null;
+  return { label: `Trễ ${Math.abs(days)} ngày`, className: "text-orange-600" };
+}
+
+function RealtimeStatusCell({ task, now }: { task: Task; now: Date }) {
+  const status = getRealtimeStatus(task, now);
+  const StatusIcon = STATUS_ICONS[status] || AlertCircle;
+  const deadline = getDeadlineSummary(task, now);
+
+  return (
+    <div className="flex min-w-[150px] flex-col items-center gap-1">
+      <span className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold ring-1", STATUS_COLORS[status] || STATUS_COLORS.NO_EVALUATION)}>
+        <StatusIcon className="h-3.5 w-3.5" strokeWidth={2.5} />
+        {STATUS_LABELS[status] || task.statusLabel}
+      </span>
+      {deadline && (
+        <span className={cn("text-[11px] font-medium", deadline.className)}>
+          {deadline.label}
+        </span>
+      )}
+    </div>
+  );
+}
+
+type TaskPriority = "URGENT" | "NORMAL";
+
+const PRIORITY_META: Record<TaskPriority, {
+  label: string;
+  icon: LucideIcon;
+  badge: string;
+  iconBox: string;
+  selected: string;
+}> = {
+  URGENT: {
+    label: "Hỏa tốc",
+    icon: Flag,
+    badge: "bg-destructive/10 text-destructive ring-destructive/20",
+    iconBox: "bg-destructive/15 text-destructive",
+    selected: "border-destructive/40 bg-destructive/5 text-destructive shadow-[0_4px_14px_rgba(239,68,68,0.12)]",
+  },
+  NORMAL: {
+    label: "Thường",
+    icon: Circle,
+    badge: "bg-muted text-muted-foreground ring-border",
+    iconBox: "bg-muted text-muted-foreground",
+    selected: "border-primary/30 bg-accent/60 text-primary shadow-[0_4px_14px_rgba(79,70,229,0.10)]",
+  },
+};
+
+function PriorityBadge({ value }: { value?: string }) {
+  const priority = value === "URGENT" ? "URGENT" : "NORMAL";
+  const meta = PRIORITY_META[priority];
+  const Icon = meta.icon;
+
+  if (priority === "NORMAL") {
+    return <span className="text-xs font-medium text-muted-foreground">{meta.label}</span>;
+  }
+
+  return (
+    <span className={cn("inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ring-1", meta.badge)}>
+      {priority === "URGENT" && <Icon className="h-3.5 w-3.5" strokeWidth={2.5} />}
+      {meta.label}
+    </span>
+  );
+}
+
+function PrioritySelector({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value?: string;
+  onChange: (value: TaskPriority) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div role="radiogroup" aria-label="Mức độ ưu tiên" className="grid grid-cols-2 gap-2">
+      {(Object.keys(PRIORITY_META) as TaskPriority[]).map((priority) => {
+        const meta = PRIORITY_META[priority];
+        const Icon = meta.icon;
+        const selected = (value || "NORMAL") === priority;
+
+        return (
+          <button
+            key={priority}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={disabled}
+            onClick={() => onChange(priority)}
+            className={cn(
+              "flex min-h-11 items-center gap-2 rounded-lg border px-3 text-left text-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-60",
+              selected
+                ? meta.selected
+                : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:bg-accent/30",
+            )}
+          >
+            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", selected ? meta.iconBox : "bg-muted/70 text-muted-foreground")}>
+              <Icon className="h-4 w-4" strokeWidth={2.25} />
+            </span>
+            <span className="min-w-0 flex-1 font-medium">{meta.label}</span>
+            {selected && <Check className="h-4 w-4 shrink-0" strokeWidth={2.5} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function getTodayInputValue() {
   const today = new Date();
@@ -103,6 +294,7 @@ function getEditFormData(task: Task): Record<string, string> {
     content: task.content || "",
     source: task.source || "",
     assignedBy: task.assignedBy || "",
+    priority: task.priority || "NORMAL",
     assignedDate: task.assignedDate?.split("T")[0] || "",
     documentNumber: task.documentNumber || "",
     requiredCompletionDate: task.requiredCompletionDate?.split("T")[0] || "",
@@ -111,6 +303,33 @@ function getEditFormData(task: Task): Record<string, string> {
     incompleteReason: task.incompleteReason || "",
     coordinatingUnits: task.coordinatingUnits || "",
   };
+}
+
+const APPROVAL_STATUS_META: Record<Task["approvalStatus"], { label: string; className: string }> = {
+  NOT_SUBMITTED: { label: "Chưa gửi", className: "bg-muted text-muted-foreground ring-border" },
+  PENDING: { label: "Chờ duyệt", className: "bg-amber-50 text-amber-700 ring-amber-200" },
+  APPROVED: { label: "Đã duyệt", className: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+  NEEDS_REVISION: { label: "Cần bổ sung", className: "bg-red-50 text-red-700 ring-red-200" },
+};
+
+function ApprovalStatusBadge({ task }: { task: Pick<Task, "approvalStatus" | "approvalStatusLabel"> }) {
+  if (task.approvalStatus === "NOT_SUBMITTED") return null;
+  const meta = APPROVAL_STATUS_META[task.approvalStatus];
+  return (
+    <span className={cn("inline-flex items-center whitespace-nowrap rounded-lg px-2 py-1 text-[11px] font-semibold ring-1", meta.className)}>
+      {task.approvalStatusLabel || meta.label}
+    </span>
+  );
+}
+
+function getLatestReviewFeedback(task: Task) {
+  return [...(task.feedbacks || [])]
+    .reverse()
+    .find((feedback) => feedback.type === "REVIEW");
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("vi-VN");
 }
 
 export default function TasksPage() {
@@ -144,12 +363,18 @@ export default function TasksPage() {
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmTaskAction, setConfirmTaskAction] = useState<{
+    type: "finalize" | "unfinalize";
+    taskId: string;
+  } | null>(null);
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [formData, setFormData] = useState({
     title: "",
     content: "",
     source: "",
     assignedDate: "",
     assignedBy: "",
+    priority: "NORMAL",
     documentNumber: "",
     coordinatingUnits: "",
     ownerDepartmentId: "",
@@ -157,14 +382,24 @@ export default function TasksPage() {
   });
 
   const canChooseDepartment = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY";
-  const canEditTasks = userInfo?.role !== "VIEWER";
+  const isDepartmentEditor = userInfo?.role === "DEPARTMENT_EDITOR";
+  const isOwnDepartmentSelected = !isDepartmentEditor || filterDepartment === userInfo?.departmentId;
+  const canCreateTasks = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY" ||
+    (isDepartmentEditor && isOwnDepartmentSelected);
   const canEditDetail = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY" ||
-    (userInfo?.role === "DEPARTMENT_EDITOR" && detailTask?.ownerDepartment?.id === userInfo?.departmentId);
+    (userInfo?.role === "DEPARTMENT_EDITOR" && detailTask?.ownerDepartment?.id === userInfo?.departmentId && detailTask?.approvalStatus !== "APPROVED");
+  const isRevisionOnly = detailTask?.approvalStatus === "NEEDS_REVISION";
+  const isCompletionOnly = isDepartmentEditor || isRevisionOnly;
   const canDeleteDetail = canEditDetail && (!detailTask?.isFinalized || userInfo?.role === "ADMIN");
   const originalEditFormData = detailTask ? getEditFormData(detailTask) : {};
   const hasUnsavedChanges = editingDetail && Object.keys(originalEditFormData).some(
     (key) => editFormData[key] !== originalEditFormData[key],
   );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const fetchTasks = (params: {
     deptId?: string;
@@ -206,6 +441,7 @@ export default function TasksPage() {
     const urlStatus = urlParams.get("status") || "";
     const urlDateFrom = urlParams.get("dateFrom") || "";
     const urlDateTo = urlParams.get("dateTo") || "";
+    const urlTaskId = urlParams.get("taskId");
 
     apiFetch<{ data: UserInfo }>("/auth/me")
       .then((res) => {
@@ -228,12 +464,27 @@ export default function TasksPage() {
           setTempDateFrom(urlDateFrom);
           setTempDateTo(urlDateTo);
           setFilterDepartment(defaultDept);
-          setFormData((prev) => ({ ...prev, ownerDepartmentId: defaultDept }));
+          const createDepartment = user.role === "DEPARTMENT_EDITOR" && user.departmentId
+            ? user.departmentId
+            : defaultDept;
+          setFormData((prev) => ({ ...prev, ownerDepartmentId: createDepartment }));
           return fetchTasks({
             deptId: defaultDept,
             status: urlStatus || undefined,
             dateFrom: urlDateFrom || undefined,
             dateTo: urlDateTo || undefined,
+          }).then(async () => {
+            if (!urlTaskId) return;
+            setLoadingDetail(true);
+            try {
+              const taskRes = await apiFetch<{ data: Task }>(`/tasks/${urlTaskId}`);
+              setSelectedTask(taskRes.data);
+              setDetailTask(taskRes.data);
+            } catch (err: any) {
+              setError(err.message || "Không thể tải chi tiết nhiệm vụ");
+            } finally {
+              setLoadingDetail(false);
+            }
           });
         }
       })
@@ -326,6 +577,7 @@ export default function TasksPage() {
         source: "",
         assignedDate: "",
         assignedBy: "",
+        priority: "NORMAL",
         documentNumber: "",
         coordinatingUnits: "",
         ownerDepartmentId: "",
@@ -341,19 +593,7 @@ export default function TasksPage() {
     }
   };
 
-  const handleCancel = async (taskId: string) => {
-    if (!confirm("Bạn có chắc chắn muốn hủy nhiệm vụ này?")) return;
-    try {
-      await apiFetch(`/tasks/${taskId}/cancel`, { method: "PATCH" });
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
-    } catch (err: any) {
-      setValidationMsg(err.message || "Lỗi hủy nhiệm vụ");
-      setTimeout(() => setValidationMsg(null), 8000);
-    }
-  };
-
   const handleFinalize = async (taskId: string) => {
-    if (!confirm("Bạn có chắc chắn muốn chốt nhiệm vụ này?")) return;
     try {
       await apiFetch(`/tasks/${taskId}/finalize`, { method: "PATCH" });
       await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
@@ -367,7 +607,6 @@ export default function TasksPage() {
   };
 
   const handleUnfinalize = async (taskId: string) => {
-    if (!confirm("Bạn có chắc chắn muốn mở chốt nhiệm vụ này?")) return;
     try {
       await apiFetch(`/tasks/${taskId}/unfinalize`, { method: "PATCH" });
       await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
@@ -424,13 +663,15 @@ export default function TasksPage() {
       { key: "assignedDate", label: "Ngày giao NV" },
       { key: "documentNumber", label: "Số/ký hiệu VB" },
     ];
-    for (const field of requiredFields) {
-      const value = editFormData[field.key] ?? "";
-      if (!value.trim()) {
-        setValidationMsg(`${field.label} không được để trống`);
-        setTimeout(() => setValidationMsg(null), 8000);
-        setSavingEdit(false);
-        return false;
+    if (!isCompletionOnly) {
+      for (const field of requiredFields) {
+        const value = editFormData[field.key] ?? "";
+        if (!value.trim()) {
+          setValidationMsg(`${field.label} không được để trống`);
+          setTimeout(() => setValidationMsg(null), 8000);
+          setSavingEdit(false);
+          return false;
+        }
       }
     }
     const assignedDate = editFormData.assignedDate || detailTask.assignedDate?.split("T")[0];
@@ -452,19 +693,25 @@ export default function TasksPage() {
     }
     setSavingEdit(true);
     try {
-      const payload: Record<string, any> = {
-        title: editFormData.title,
-        content: editFormData.content,
-        source: editFormData.source,
-        assignedBy: editFormData.assignedBy,
-        assignedDate: editFormData.assignedDate || undefined,
-        documentNumber: editFormData.documentNumber || undefined,
-        requiredCompletionDate: editFormData.requiredCompletionDate || null,
-        actualCompletionDate: editFormData.actualCompletionDate || null,
-        completionEvidence: editFormData.completionEvidence || null,
-        incompleteReason: editFormData.incompleteReason || null,
-        coordinatingUnits: editFormData.coordinatingUnits || null,
-      };
+      const payload: Record<string, any> = isCompletionOnly
+        ? {
+            actualCompletionDate: editFormData.actualCompletionDate || null,
+            completionEvidence: editFormData.completionEvidence || null,
+          }
+        : {
+            title: editFormData.title,
+            content: editFormData.content,
+            source: editFormData.source,
+            assignedBy: editFormData.assignedBy,
+            priority: editFormData.priority || "NORMAL",
+            assignedDate: editFormData.assignedDate || undefined,
+            documentNumber: editFormData.documentNumber || undefined,
+            requiredCompletionDate: editFormData.requiredCompletionDate || null,
+            actualCompletionDate: editFormData.actualCompletionDate || null,
+            completionEvidence: editFormData.completionEvidence || null,
+            incompleteReason: editFormData.incompleteReason || null,
+            coordinatingUnits: editFormData.coordinatingUnits || null,
+          };
       const res = await apiFetch<{ data: Task }>(`/tasks/${detailTask.id}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
@@ -603,13 +850,51 @@ export default function TasksPage() {
           </div>
         </div>
       )}
+      {confirmTaskAction && (() => {
+        const actionMeta = {
+          finalize: {
+            title: "Chốt nhiệm vụ?",
+            description: "Sau khi chốt, nhiệm vụ sẽ không thể tiếp tục chỉnh sửa.",
+            confirmLabel: "Chốt nhiệm vụ",
+            confirmVariant: "default" as const,
+            handler: handleFinalize,
+          },
+          unfinalize: {
+            title: "Mở chốt nhiệm vụ?",
+            description: "Nhiệm vụ sẽ được mở lại để tiếp tục chỉnh sửa.",
+            confirmLabel: "Mở chốt",
+            confirmVariant: "default" as const,
+            handler: handleUnfinalize,
+          },
+        }[confirmTaskAction.type];
+
+        return (
+          <ConfirmDialog
+            open
+            title={actionMeta.title}
+            description={actionMeta.description}
+            confirmLabel={actionMeta.confirmLabel}
+            confirmVariant={actionMeta.confirmVariant}
+            onCancel={() => setConfirmTaskAction(null)}
+            onConfirm={() => {
+              const taskId = confirmTaskAction.taskId;
+              setConfirmTaskAction(null);
+              void actionMeta.handler(taskId);
+            }}
+          />
+        );
+      })()}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <ListTodo className="h-6 w-6 text-primary" />
             Nhiệm vụ
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Quản lý nhiệm vụ theo phòng ban/đơn vị</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isDepartmentEditor
+              ? `Nhiệm vụ được giao cho ${userInfo?.departmentName || "phòng ban/đơn vị"}`
+              : "Quản lý nhiệm vụ theo phòng ban/đơn vị"}
+          </p>
         </div>
         <div className="flex items-center gap-2.5">
           <form onSubmit={handleSearch} className="relative">
@@ -639,7 +924,7 @@ export default function TasksPage() {
               </div>
             )}
           </div>
-          {canEditTasks && (
+          {canCreateTasks && (
             <Button size="sm" onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4" />
               Thêm nhiệm vụ
@@ -764,7 +1049,7 @@ export default function TasksPage() {
         )}
       </div>
 
-      {canEditTasks && showForm && (
+      {canCreateTasks && showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={() => !submitting && setShowForm(false)} />
           <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
@@ -854,6 +1139,15 @@ export default function TasksPage() {
                     <option value="PCT Ngô Lâm">PCT Ngô Lâm</option>
                     <option value="PBT Trần Hưng Hà">PBT Trần Hưng Hà</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Mức độ ưu tiên <span className="text-destructive">*</span>
+                  </label>
+                  <PrioritySelector
+                    value={formData.priority}
+                    onChange={(priority) => setFormData({ ...formData, priority })}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
@@ -953,7 +1247,9 @@ export default function TasksPage() {
           <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-5xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-semibold text-foreground">
-                {editingDetail ? "Chỉnh sửa nhiệm vụ" : "Chi tiết nhiệm vụ"}
+                {editingDetail
+                  ? isCompletionOnly ? "Cập nhật kết quả hoàn thành" : "Chỉnh sửa nhiệm vụ"
+                  : "Chi tiết nhiệm vụ"}
               </h2>
               <div className="flex items-center gap-2">
                 {editingDetail ? (
@@ -1004,7 +1300,7 @@ export default function TasksPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleUnfinalize(detailTask!.id)}
+                            onClick={() => setConfirmTaskAction({ type: "unfinalize", taskId: detailTask!.id })}
                           >
                             <Unlock className="h-3.5 w-3.5" />
                             Mở chốt
@@ -1013,7 +1309,7 @@ export default function TasksPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleFinalize(detailTask!.id)}
+                            onClick={() => setConfirmTaskAction({ type: "finalize", taskId: detailTask!.id })}
                           >
                             <Lock className="h-3.5 w-3.5" />
                             Chốt
@@ -1047,17 +1343,22 @@ export default function TasksPage() {
                           type="text"
                           value={editFormData.title}
                           onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
+                          disabled={isCompletionOnly}
                           className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
                         />
                       ) : (
-                        <h3 className="text-lg font-semibold text-foreground leading-tight">{detailTask.title}</h3>
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                          <h3 className="min-w-0 text-lg font-semibold leading-tight text-foreground">{detailTask.title}</h3>
+                          {detailTask.priority === "URGENT" && <PriorityBadge value={detailTask.priority} />}
+                        </div>
                       )}
                       <p className="text-xs text-muted-foreground mt-1">
                         Tạo bởi {detailTask.creator?.fullName} - {formatDate(detailTask.createdAt)}
+                        {detailTask.updater && ` · Cập nhật bởi ${detailTask.updater.fullName}`}
                       </p>
                     </div>
                     {!editingDetail && (
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                         {detailTask.isFinalized && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
                             <Lock className="h-3 w-3" />
@@ -1080,7 +1381,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Nguồn giao NV <span className="text-destructive">*</span></label>
                         {editingDetail ? (
-                          <input type="text" value={editFormData.source} onChange={(e) => setEditFormData({ ...editFormData, source: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
+                          <input type="text" value={editFormData.source} onChange={(e) => setEditFormData({ ...editFormData, source: e.target.value })} disabled={isCompletionOnly} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.source}</p>
                         )}
@@ -1088,7 +1389,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Số/ký hiệu VB <span className="text-destructive">*</span></label>
                         {editingDetail ? (
-                          <input type="text" value={editFormData.documentNumber} onChange={(e) => setEditFormData({ ...editFormData, documentNumber: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
+                          <input type="text" value={editFormData.documentNumber} onChange={(e) => setEditFormData({ ...editFormData, documentNumber: e.target.value })} disabled={isCompletionOnly} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.documentNumber || "—"}</p>
                         )}
@@ -1096,7 +1397,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Lãnh đạo giao NV <span className="text-destructive">*</span></label>
                         {editingDetail ? (
-                          <select value={editFormData.assignedBy} onChange={(e) => setEditFormData({ ...editFormData, assignedBy: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1">
+                          <select value={editFormData.assignedBy} onChange={(e) => setEditFormData({ ...editFormData, assignedBy: e.target.value })} disabled={isCompletionOnly} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1">
                             <option value="">Chọn lãnh đạo</option>
                             <option value="Cục trưởng Bùi Quang Thái">Cục trưởng Bùi Quang Thái</option>
                             <option value="PCT Nguyễn Mạnh Thắng">PCT Nguyễn Mạnh Thắng</option>
@@ -1114,15 +1415,25 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày giao NV <span className="text-destructive">*</span></label>
                         {editingDetail ? (
-                          <input type="date" value={editFormData.assignedDate} onChange={(e) => setEditFormData({ ...editFormData, assignedDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
+                          <input type="date" value={editFormData.assignedDate} onChange={(e) => setEditFormData({ ...editFormData, assignedDate: e.target.value })} disabled={isCompletionOnly} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{formatDate(detailTask.assignedDate)}</p>
                         )}
                       </div>
+                      {editingDetail && (
+                        <div className="col-span-2">
+                          <label className="text-xs text-muted-foreground">Mức độ ưu tiên <span className="text-destructive">*</span></label>
+                          <PrioritySelector
+                            value={editFormData.priority}
+                            onChange={(priority) => setEditFormData({ ...editFormData, priority })}
+                            disabled={isCompletionOnly}
+                          />
+                        </div>
+                      )}
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Nội dung nhiệm vụ <span className="text-destructive">*</span></label>
                         {editingDetail ? (
-                          <textarea value={editFormData.content} onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })} rows={3} className="min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
+                          <textarea value={editFormData.content} onChange={(e) => setEditFormData({ ...editFormData, content: e.target.value })} disabled={isCompletionOnly} rows={3} className="min-h-[80px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
                           <p className="text-sm text-foreground mt-0.5 leading-relaxed whitespace-pre-wrap">{detailTask.content}</p>
                         )}
@@ -1146,7 +1457,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Đơn vị phối hợp</label>
                         {editingDetail ? (
-                          <input type="text" value={editFormData.coordinatingUnits} onChange={(e) => setEditFormData({ ...editFormData, coordinatingUnits: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" placeholder="Nhập đơn vị phối hợp" />
+                          <input type="text" value={editFormData.coordinatingUnits} onChange={(e) => setEditFormData({ ...editFormData, coordinatingUnits: e.target.value })} disabled={isCompletionOnly} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" placeholder="Nhập đơn vị phối hợp" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.coordinatingUnits || "—"}</p>
                         )}
@@ -1163,7 +1474,7 @@ export default function TasksPage() {
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày YC hoàn thành</label>
                         {editingDetail ? (
-                          <input type="date" value={editFormData.requiredCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, requiredCompletionDate: e.target.value })} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
+                          <input type="date" value={editFormData.requiredCompletionDate} onChange={(e) => setEditFormData({ ...editFormData, requiredCompletionDate: e.target.value })} disabled={isCompletionOnly} className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1" />
                         ) : (
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.requiredCompletionDate ? formatDate(detailTask.requiredCompletionDate) : "—"}</p>
                         )}
@@ -1187,13 +1498,81 @@ export default function TasksPage() {
                       <div className="col-span-2">
                         <label className="text-xs text-muted-foreground">Lý do chưa hoàn thành</label>
                         {editingDetail ? (
-                          <textarea value={editFormData.incompleteReason} onChange={(e) => setEditFormData({ ...editFormData, incompleteReason: e.target.value })} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
+                          <textarea value={editFormData.incompleteReason} onChange={(e) => setEditFormData({ ...editFormData, incompleteReason: e.target.value })} disabled={isCompletionOnly} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
                         ) : (
                           <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{detailTask.incompleteReason || "—"}</p>
                         )}
                       </div>
                     </div>
                   </div>
+
+                  {editingDetail && isCompletionOnly && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      {isRevisionOnly
+                        ? "Nhiệm vụ cần bổ sung. Chỉ có thể cập nhật ngày hoàn thành thực tế và bằng chứng."
+                        : "Đại diện phòng ban chỉ cập nhật ngày hoàn thành thực tế và bằng chứng."}
+                    </div>
+                  )}
+
+                  {(detailTask.approvalStatus !== "NOT_SUBMITTED" || (detailTask.feedbacks || []).length > 0) && (() => {
+                    const latestReview = getLatestReviewFeedback(detailTask);
+                    const directives = (detailTask.feedbacks || []).filter((feedback) => feedback.type === "DIRECTIVE");
+                    return (
+                      <div className="rounded-lg border border-border overflow-hidden">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-2">
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phản hồi xử lý</h4>
+                          <ApprovalStatusBadge task={detailTask} />
+                        </div>
+                        <div className="space-y-3 p-4">
+                          {detailTask.approvalStatus === "PENDING" && (
+                            <p className="text-sm text-amber-700">
+                              Hồ sơ hoàn thành đã được gửi và đang chờ Lãnh đạo/Thư ký duyệt.
+                            </p>
+                          )}
+
+                          {detailTask.approvalStatus === "APPROVED" && latestReview?.decision === "APPROVED" && (
+                            <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                              <div>
+                                <p className="font-semibold">Đã duyệt hoàn thành</p>
+                                <p className="mt-0.5 text-xs text-emerald-700">
+                                  {latestReview.author.fullName} · {formatDateTime(latestReview.createdAt)}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+
+                          {detailTask.approvalStatus === "NEEDS_REVISION" && latestReview && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+                              <div className="flex items-center gap-2 font-semibold">
+                                <MessageSquare className="h-4 w-4" />
+                                Yêu cầu bổ sung từ {latestReview.author.fullName}
+                              </div>
+                              <p className="mt-1 whitespace-pre-wrap leading-relaxed">{latestReview.content}</p>
+                              <p className="mt-1 text-xs text-red-700">{formatDateTime(latestReview.createdAt)}</p>
+                            </div>
+                          )}
+
+                          {directives.length > 0 && (
+                            <div className="space-y-2">
+                              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                <MessageSquare className="h-3.5 w-3.5" />
+                                Ý kiến chỉ đạo
+                              </p>
+                              {directives.map((feedback) => (
+                                <div key={feedback.id} className="rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2.5 text-sm text-blue-900">
+                                  <p className="whitespace-pre-wrap leading-relaxed">{feedback.content}</p>
+                                  <p className="mt-1 text-xs text-blue-700">
+                                    {feedback.author.fullName} · {formatDateTime(feedback.createdAt)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 </div>
               ) : null}
@@ -1265,30 +1644,31 @@ export default function TasksPage() {
                   <th className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-2/5">Tiêu đề</th>
                   <th className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Lãnh đạo</th>
                   <th
-                    className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                    className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
                     onClick={() => handleSort("assignedDate")}
                   >
                     Ngày giao {sortBy === "assignedDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
                   </th>
                   <th
-                    className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                    className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
                     onClick={() => handleSort("requiredCompletionDate")}
                   >
-                    YC hoàn thành {sortBy === "requiredCompletionDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                    Hạn hoàn thành {sortBy === "requiredCompletionDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
                   </th>
                   <th
-                    className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                    className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
                     onClick={() => handleSort("actualCompletionDate")}
                   >
-                    HT thực tế {sortBy === "actualCompletionDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
+                    Thực tế {sortBy === "actualCompletionDate" ? (sortOrder === "asc" ? "▲" : "▼") : ""}
                   </th>
                   <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Trạng thái</th>
+                  <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">Mức độ</th>
                 </tr>
               </thead>
               <tbody>
                 {tasks.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-muted-foreground">
+                    <td colSpan={8} className="p-8 text-center text-muted-foreground">
                       Không có nhiệm vụ nào
                     </td>
                   </tr>
@@ -1301,26 +1681,31 @@ export default function TasksPage() {
                     >
                       <td className="px-2 py-2 text-center text-muted-foreground">{index + 1}</td>
                       <td className="px-2 py-2">
-                        <div className="font-medium line-clamp-2 min-w-0">{task.title}</div>
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                          <div className="line-clamp-2 min-w-0 font-medium">{task.title}</div>
+                          <ApprovalStatusBadge task={task} />
+                        </div>
+                        <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
+                          Theo {task.source}{task.documentNumber ? ` và ${task.documentNumber}` : ""}
+                        </div>
                       </td>
                       <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">{task.assignedBy}</td>
-                      <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">{formatDate(task.assignedDate)}</td>
-                      <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
+                      <td className="px-2 py-2 whitespace-nowrap text-center tabular-nums text-muted-foreground">{formatDate(task.assignedDate)}</td>
+                      <td className="px-2 py-2 whitespace-nowrap text-center tabular-nums text-muted-foreground">
                         {task.requiredCompletionDate
                           ? formatDate(task.requiredCompletionDate)
                           : "—"}
                       </td>
-                      <td className="px-2 py-2 whitespace-nowrap text-muted-foreground">
+                      <td className="px-2 py-2 whitespace-nowrap text-center tabular-nums text-muted-foreground">
                         {task.actualCompletionDate
                           ? formatDate(task.actualCompletionDate)
                           : "—"}
                       </td>
                       <td className="px-2 py-2 text-center">
-                        <span
-                          className={cn("inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-2 text-xs font-semibold ring-1", STATUS_COLORS[task.status] || "bg-gray-100 text-gray-600")}
-                        >
-                          {task.statusLabel}
-                        </span>
+                        <RealtimeStatusCell task={task} now={currentTime} />
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <PriorityBadge value={task.priority} />
                       </td>
                     </tr>
                   ))

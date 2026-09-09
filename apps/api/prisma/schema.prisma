@@ -50,8 +50,41 @@ model User {
   createdTasks Task[]          @relation("TaskCreator")
   updatedTasks Task[]          @relation("TaskUpdater")
   auditLogs    AuditLog[]
+  taskFeedbacks TaskFeedback[]
 
   @@map("users")
+}
+
+enum TaskPriority {
+  URGENT
+  NORMAL
+}
+
+enum TaskApprovalStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  NEEDS_REVISION
+}
+
+enum TaskOfficialStatus {
+  CANCELLED
+  IN_PROGRESS
+  INCOMPLETE
+  COMPLETED_EARLY
+  COMPLETED_ON_TIME
+  COMPLETED_LATE
+  NO_EVALUATION
+}
+
+enum TaskFeedbackType {
+  DIRECTIVE
+  REVIEW
+}
+
+enum TaskFeedbackDecision {
+  APPROVED
+  NEEDS_REVISION
 }
 
 model Task {
@@ -62,6 +95,7 @@ model Task {
   source                   String   @map("source")
   assignedDate             DateTime @map("assigned_date")
   assignedBy               String   @map("assigned_by")
+  priority                 TaskPriority @default(NORMAL)
   documentNumber           String?  @map("document_number")
   coordinatingUnits        String?  @map("coordinating_units")
   ownerDepartmentId        String   @map("owner_department_id")
@@ -73,6 +107,10 @@ model Task {
   cancelledAt              DateTime? @map("cancelled_at")
   cancelledBy              String?  @map("cancelled_by")
   isFinalized              Boolean  @default(false) @map("is_finalized")
+  approvalStatus           TaskApprovalStatus @default(NOT_SUBMITTED) @map("approval_status")
+  approvedStatus           TaskOfficialStatus? @map("approved_status")
+  approvedAt               DateTime? @map("approved_at")
+  approvedBy               String?  @map("approved_by")
   finalizedAt              DateTime? @map("finalized_at")
   finalizedBy              String?  @map("finalized_by")
   version                  Int      @default(1)
@@ -86,6 +124,7 @@ model Task {
   updater             User?                      @relation("TaskUpdater", fields: [updatedBy], references: [id])
   coordinatingDepts   TaskCoordinatingDepartment[]
   auditLogs           AuditLog[]
+  feedbacks           TaskFeedback[]
 
   @@index([ownerDepartmentId])
   @@index([requiredCompletionDate])
@@ -95,6 +134,22 @@ model Task {
   @@index([createdAt])
   @@index([ownerDepartmentId, requiredCompletionDate])
   @@map("tasks")
+}
+
+model TaskFeedback {
+  id         String               @id @default(uuid())
+  taskId     String               @map("task_id")
+  authorId   String               @map("author_id")
+  type       TaskFeedbackType
+  decision   TaskFeedbackDecision?
+  content    String
+  createdAt  DateTime             @default(now()) @map("created_at")
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+  @@map("task_feedbacks")
 }
 
 model TaskCoordinatingDepartment {

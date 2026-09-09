@@ -31,6 +31,7 @@ interface User {
 const ROLE_BADGE: Record<string, string> = {
   ADMIN: "bg-primary/10 text-primary ring-primary/20",
   SECRETARY: "bg-secondary/10 text-secondary ring-secondary/20",
+  LEADER: "bg-amber-50 text-amber-700 ring-amber-200",
   DEPARTMENT_EDITOR: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   VIEWER: "bg-muted text-muted-foreground ring-border",
 };
@@ -38,6 +39,7 @@ const ROLE_BADGE: Record<string, string> = {
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   SECRETARY: "Thư ký",
+  LEADER: "Lãnh đạo",
   DEPARTMENT_EDITOR: "Phụ trách phòng ban/đơn vị",
   VIEWER: "Người xem",
 };
@@ -96,7 +98,7 @@ export default function UsersPage() {
       const res = await apiFetch<{ data: User[] }>("/users");
       setUsers(res.data);
     } catch (err: any) {
-      alert("Lỗi: " + err.message);
+      setError("Lỗi: " + err.message);
     }
   };
 

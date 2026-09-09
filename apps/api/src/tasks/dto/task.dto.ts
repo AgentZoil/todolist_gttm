@@ -4,7 +4,16 @@ import {
   IsOptional,
   IsDateString,
   MaxLength,
+  IsEnum,
 } from 'class-validator';
+import { TaskPriority } from '@prisma/client';
+
+export class TaskFeedbackDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(2000)
+  content: string;
+}
 
 export class CreateTaskDto {
   @IsString()
@@ -30,6 +39,10 @@ export class CreateTaskDto {
   @IsNotEmpty()
   @MaxLength(200)
   assignedBy: string;
+
+  @IsEnum(TaskPriority)
+  @IsOptional()
+  priority?: TaskPriority;
 
   @IsString()
   @IsNotEmpty()
@@ -74,6 +87,10 @@ export class UpdateTaskDto {
   @IsOptional()
   @MaxLength(200)
   assignedBy?: string;
+
+  @IsEnum(TaskPriority)
+  @IsOptional()
+  priority?: TaskPriority;
 
   @IsString()
   @IsOptional()

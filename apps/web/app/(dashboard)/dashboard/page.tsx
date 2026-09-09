@@ -41,6 +41,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setLoading(true);
+    setError(null);
     apiFetch<{ data: { departments: DepartmentStats[] } }>(`/dashboard/departments?month=${selectedMonth}`)
       .then((deptRes) => setDepartments(deptRes.data.departments))
       .catch((err) => setError(err.message))

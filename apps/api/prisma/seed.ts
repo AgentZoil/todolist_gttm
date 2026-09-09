@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  // Create 4 roles
+  // Create 5 roles
   const roles = await Promise.all([
     prisma.role.upsert({
       where: { name: 'ADMIN' },
@@ -14,6 +14,11 @@ async function main() {
       where: { name: 'SECRETARY' },
       update: {},
       create: { name: 'SECRETARY', description: 'Thư ký / Người giao nhiệm vụ' },
+    }),
+    prisma.role.upsert({
+      where: { name: 'LEADER' },
+      update: {},
+      create: { name: 'LEADER', description: 'Lãnh đạo / Người duyệt nhiệm vụ' },
     }),
     prisma.role.upsert({
       where: { name: 'DEPARTMENT_EDITOR' },
@@ -28,26 +33,6 @@ async function main() {
   ]);
   console.log('Roles created:', roles.map((r) => r.name).join(', '));
 
-  // Create 3 sample departments
-  const departments = await Promise.all([
-    prisma.department.upsert({
-      where: { code: 'PHONG_01' },
-      update: {},
-      create: { code: 'PHONG_01', name: 'Phòng 01' },
-    }),
-    prisma.department.upsert({
-      where: { code: 'PHONG_02' },
-      update: {},
-      create: { code: 'PHONG_02', name: 'Phòng 02' },
-    }),
-    prisma.department.upsert({
-      where: { code: 'PHONG_03' },
-      update: {},
-      create: { code: 'PHONG_03', name: 'Phòng 03' },
-    }),
-  ]);
-  console.log('Departments created:', departments.map((d) => d.name).join(', '));
-
   // Create admin user (auth_user_id = 'admin-test' for dev only)
   const adminUser = await prisma.user.upsert({
     where: { authUserId: 'admin-test' },
@@ -56,7 +41,7 @@ async function main() {
       authUserId: 'admin-test',
       fullName: 'Admin User',
       roleId: roles.find((r) => r.name === 'ADMIN')!.id,
-      departmentId: departments[0].id,
+      departmentId: null,
     },
   });
   console.log('Admin user created:', adminUser.fullName);

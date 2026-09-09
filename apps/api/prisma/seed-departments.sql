@@ -3,6 +3,7 @@ INSERT INTO roles (id, name, description) VALUES
   ('c57853e5-02a6-4dbb-82f9-f0af804c085f', 'ADMIN', 'Quản trị viên tối cao'),
   ('159f7327-8844-48f2-9590-0d1a2b2af78d', 'DEPARTMENT_EDITOR', 'Phòng ban - Chỉnh sửa nhiệm vụ'),
   ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'SECRETARY', 'Thư ký / Người giao nhiệm vụ'),
+  ('b1b2c3d4-e5f6-7890-abcd-ef1234567890', 'LEADER', 'Lãnh đạo / Người duyệt nhiệm vụ'),
   ('b2c3d4e5-f6a7-8901-bcde-f12345678901', 'VIEWER', 'Chỉ xem')
 ON CONFLICT (name) DO NOTHING;
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Lock, Unlock, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -26,6 +27,7 @@ export default function PeriodLocksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [unlockMonth, setUnlockMonth] = useState<number | null>(null);
 
   const now = new Date();
   const [selectedYear, setSelectedYear] = useState(now.getFullYear());
@@ -61,7 +63,6 @@ export default function PeriodLocksPage() {
   };
 
   const handleUnlock = async (month: number) => {
-    if (!confirm(`Bạn có chắc muốn mở khóa tháng ${month}/${selectedYear}?`)) return;
     const key = `${selectedYear}-${month}`;
     setActionLoading(key);
     try {
@@ -98,6 +99,20 @@ export default function PeriodLocksPage() {
 
   return (
     <div className="space-y-6">
+      <ConfirmDialog
+        open={unlockMonth !== null}
+        title="Mở khóa tháng?"
+        description={unlockMonth === null ? "" : `Bạn có chắc muốn mở khóa tháng ${unlockMonth}/${selectedYear}?`}
+        confirmLabel="Mở khóa"
+        onCancel={() => setUnlockMonth(null)}
+        onConfirm={() => {
+          if (unlockMonth === null) return;
+          const month = unlockMonth;
+          setUnlockMonth(null);
+          void handleUnlock(month);
+        }}
+        loading={unlockMonth !== null && actionLoading === `${selectedYear}-${unlockMonth}`}
+      />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Khóa tháng</h1>
@@ -233,7 +248,7 @@ export default function PeriodLocksPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => handleUnlock(month)}
+                      onClick={() => setUnlockMonth(month)}
                       disabled={isLoading}
                       className="h-7 gap-1.5 text-xs"
                     >

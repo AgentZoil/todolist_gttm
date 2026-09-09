@@ -16,7 +16,8 @@ A task tracking and evaluation system built with NestJS, Next.js, and Supabase.
 - Audit logging with field-level diff
 - Period lock and task finalization
 - Dashboard with summary statistics
-- Role-based access control (Admin, Secretary, Department Editor)
+- Role-based access control (Admin, Leader, Secretary, Department Editor)
+- Completion review workflow with feedback, approval, and revision requests
 
 ## Prerequisites
 
@@ -112,18 +113,62 @@ npm run dev
 
 ## Docker Deployment
 
-### Using Docker Compose
+### Local Docker Network
+
+Docker Compose chạy hai service trên network `app-network`:
+
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:3001/api`
+
+Tạo file `.env` ở thư mục gốc và điền các biến được Compose sử dụng:
+
+```env
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+SUPABASE_URL=your-project-url
+SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+SUPABASE_SECRET_KEY=your-secret-key
+ALLOWED_ORIGINS=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+```
+
+Build lại image sau khi thay đổi code:
 
 ```bash
-# Create .env file in root directory with all required variables
-cp apps/api/.env.example .env
+docker compose build --no-cache
+```
 
-# Build and start services
-docker-compose up -d
+Khởi động local network:
 
-# Access:
-# - Frontend: http://localhost:3000
-# - Backend: http://localhost:3001
+```bash
+docker compose up -d
+```
+
+Kiểm tra container và health API:
+
+```bash
+docker compose ps
+curl http://localhost:3001/api/auth/status
+```
+
+Xem log:
+
+```bash
+docker compose logs -f api web
+```
+
+Dừng local network:
+
+```bash
+docker compose down
+```
+
+Nếu chỉ cần rebuild rồi chạy lại:
+
+```bash
+docker compose build --no-cache
+docker compose up -d
 ```
 
 ### Building Individual Images
@@ -146,8 +191,12 @@ docker build -t task-web -f apps/web/Dockerfile .
 ### Tasks
 - `GET /api/tasks` - List tasks (with pagination, search, filters)
 - `GET /api/tasks/:id` - Get task by ID
+- `GET /api/tasks/pending-approval` - List tasks waiting for approval (Admin/Leader/Secretary)
 - `POST /api/tasks` - Create task
 - `PATCH /api/tasks/:id` - Update task (with optimistic locking)
+- `PATCH /api/tasks/:id/approve` - Approve completion (Admin/Leader/Secretary)
+- `PATCH /api/tasks/:id/request-revision` - Request completion supplements (Admin/Leader/Secretary)
+- `POST /api/tasks/:id/directives` - Add leader/secretary directive
 - `PATCH /api/tasks/:id/cancel` - Cancel task (Admin/Secretary only)
 - `PATCH /api/tasks/:id/finalize` - Finalize task
 - `PATCH /api/tasks/:id/unfinalize` - Unfinalize task (Admin only)
