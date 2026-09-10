@@ -21,7 +21,6 @@ interface AttentionTask {
   requiredCompletionDate?: string;
   actualCompletionDate?: string;
   approvalStatus: "PENDING" | "APPROVED" | "NEEDS_REVISION" | "NOT_SUBMITTED";
-  approvalStatusLabel?: string;
   updatedAt: string;
   ownerDepartment: { id: string; name: string };
   feedbacks?: Feedback[];

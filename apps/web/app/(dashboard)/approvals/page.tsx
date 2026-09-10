@@ -48,7 +48,6 @@ interface ApprovalTask {
   actualCompletionDate?: string;
   completionEvidence?: string;
   approvalStatus: "PENDING";
-  approvalStatusLabel?: string;
   status: string;
   statusLabel: string;
   ownerDepartment: Department;
