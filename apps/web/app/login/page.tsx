@@ -33,7 +33,7 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      setError("Email hoặc mật khẩu có thể chưa đúng. Vui lòng kiểm tra lại thông tin và thử lại.");
       setLoading(false);
       return;
     }
