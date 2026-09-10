@@ -25,7 +25,7 @@ interface User {
   authUserId: string;
   isActive: boolean;
   role: Role;
-  department: Department;
+  department?: Department | null;
 }
 
 const ROLE_BADGE: Record<string, string> = {

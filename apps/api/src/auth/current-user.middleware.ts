@@ -8,7 +8,7 @@ export interface CurrentUser {
   email: string;
   fullName: string;
   roleId: string;
-  departmentId: string;
+  departmentId: string | null;
   role: string;
   isActive: boolean;
 }
@@ -53,7 +53,7 @@ export class CurrentUserMiddleware implements NestMiddleware {
       email: authUser.email,
       fullName: user.fullName,
       roleId: user.roleId,
-      departmentId: user.departmentId,
+      departmentId: user.role.name === 'DEPARTMENT_EDITOR' ? user.departmentId : null,
       role: user.role.name,
       isActive: user.isActive,
     };

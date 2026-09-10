@@ -143,6 +143,20 @@ CREATE TABLE IF NOT EXISTS task_feedbacks (
 
 CREATE INDEX IF NOT EXISTS idx_task_feedbacks_task_created_at ON task_feedbacks(task_id, created_at);
 
+CREATE TABLE IF NOT EXISTS task_feedback_reads (
+  feedback_id TEXT NOT NULL REFERENCES task_feedbacks(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  read_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (feedback_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_feedback_reads_user_read_at ON task_feedback_reads(user_id, read_at);
+
+-- Only department representatives are associated with a department.
+UPDATE users
+SET department_id = NULL
+WHERE role_id IN (SELECT id FROM roles WHERE name <> 'DEPARTMENT_EDITOR');
+
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_id ON audit_logs(entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);

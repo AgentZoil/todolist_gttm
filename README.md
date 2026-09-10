@@ -109,6 +109,7 @@ npm run dev
 | Editor 01 | editor01@gttm.vn | editor123 | DEPARTMENT_EDITOR |
 | Editor 02 | editor02@gttm.vn | editor123 | DEPARTMENT_EDITOR |
 | Secretary | secretary@gttm.vn | secretary123 | SECRETARY |
+| Leader Test | leader-test@gttm.vn | leader123 | LEADER |
 | Viewer | viewer@gttm.vn | viewer123 | VIEWER |
 
 ## Docker Deployment

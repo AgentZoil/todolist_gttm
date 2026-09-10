@@ -70,7 +70,7 @@ export class AuthGuard implements CanActivate {
       email: data.user.email ?? '',
       fullName: user.fullName,
       roleId: user.roleId,
-      departmentId: user.departmentId,
+      departmentId: user.role.name === 'DEPARTMENT_EDITOR' ? user.departmentId : null,
       role: user.role.name,
       isActive: user.isActive,
     };

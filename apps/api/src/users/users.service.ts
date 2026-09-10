@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../auth/supabase.service';
 
@@ -10,10 +10,14 @@ export class UsersService {
   ) {}
 
   async findAll() {
-    return this.prisma.user.findMany({
+    const users = await this.prisma.user.findMany({
       include: { role: true, department: true },
       orderBy: { createdAt: 'desc' },
     });
+    return users.map((user) => ({
+      ...user,
+      department: user.role.name === 'DEPARTMENT_EDITOR' ? user.department : null,
+    }));
   }
 
   async create(data: {
@@ -28,13 +32,15 @@ export class UsersService {
       data.fullName,
       data.password,
     );
+    const role = await this.prisma.role.findUnique({ where: { id: data.roleId } });
+    if (!role) throw new NotFoundException('Không tìm thấy vai trò');
 
     return this.prisma.user.create({
       data: {
         authUserId: supabaseUser.id,
         fullName: data.fullName,
         roleId: data.roleId,
-        departmentId: data.departmentId || null,
+        departmentId: role.name === 'DEPARTMENT_EDITOR' ? data.departmentId || null : null,
       },
       include: { role: true, department: true },
     });
