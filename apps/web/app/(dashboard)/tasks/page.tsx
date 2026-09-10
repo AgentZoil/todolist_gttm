@@ -1579,28 +1579,30 @@ export default function TasksPage() {
                                 </span>
                               </div>
                               <div className="mt-4 max-h-[360px] space-y-5 overflow-y-auto pr-1">
-                                {["DIRECTIVE", "REVIEW"].map((groupType) => {
+                                {[
+                                  { type: "DIRECTIVE" as const, decision: undefined, title: "Ý kiến chỉ đạo" },
+                                  { type: "REVIEW" as const, decision: "NEEDS_REVISION" as const, title: "Yêu cầu bổ sung" },
+                                  { type: "REVIEW" as const, decision: "APPROVED" as const, title: "Đã duyệt hoàn thành" },
+                                ].map((group) => {
                                   const groupItems = feedbacks
-                                    .filter((feedback) => feedback.type === groupType)
+                                    .filter((feedback) => feedback.type === group.type && (!group.decision || feedback.decision === group.decision))
                                     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
                                   if (groupItems.length === 0) return null;
-                                  const isDirectiveGroup = groupType === "DIRECTIVE";
-                                  const hasRevision = groupItems.some((feedback) => feedback.decision === "NEEDS_REVISION");
-                                  const groupTitle = isDirectiveGroup ? "Ý kiến chỉ đạo" : hasRevision ? "Yêu cầu bổ sung" : "Đã duyệt hoàn thành";
-                                  const groupTitleTone = isDirectiveGroup ? "text-foreground" : hasRevision ? "text-red-700" : "text-emerald-700";
+                                  const isDirectiveGroup = group.type === "DIRECTIVE";
+                                  const isApprovedGroup = group.decision === "APPROVED";
+                                  const groupTitleTone = isDirectiveGroup ? "text-foreground" : isApprovedGroup ? "text-emerald-700" : "text-red-700";
                                   return (
-                                    <div key={groupType}>
+                                    <div key={`${group.type}-${group.decision || "all"}`}>
                                       <div className="mb-2 flex items-center justify-between gap-3">
                                         <p className={`flex items-center gap-2 text-xs font-semibold ${groupTitleTone}`}>
-                                          <span className={`h-2 w-2 rounded-full ${isDirectiveGroup ? "bg-blue-500" : hasRevision ? "bg-red-500" : "bg-emerald-500"}`} />
-                                          {groupTitle}
+                                          <span className={`h-2 w-2 rounded-full ${isDirectiveGroup ? "bg-blue-500" : isApprovedGroup ? "bg-emerald-500" : "bg-red-500"}`} />
+                                          {group.title}
                                         </p>
                                       </div>
                                       <div className="relative space-y-2 pl-4">
                                         <span className="absolute bottom-3 left-[3px] top-3 w-px bg-border" />
                                         {groupItems.map((feedback) => {
                                           const isApproved = feedback.decision === "APPROVED";
-                                          const title = isDirectiveGroup || !isApproved ? null : "Đã duyệt hoàn thành";
                                           const tone = isDirectiveGroup
                                             ? "border-blue-200/80 bg-blue-50/40"
                                             : isApproved
@@ -1633,7 +1635,6 @@ export default function TasksPage() {
                                                     )}
                                                   </span>
                                                 </div>
-                                                {title && <p className={`mt-1 text-xs font-semibold ${isApproved ? "text-emerald-700" : "text-red-700"}`}>{title}</p>}
                                                 {feedback.content && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{feedback.content}</p>}
                                               </div>
                                             </div>
