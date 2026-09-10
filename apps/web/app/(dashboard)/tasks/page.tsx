@@ -27,7 +27,6 @@ import {
   Flag,
   Circle,
   Clock3,
-  MessageSquare,
 } from "lucide-react";
 
 interface Department {
@@ -57,10 +56,8 @@ interface Task {
   finalizedBy?: string;
   version: number;
   createdAt: string;
-  updatedAt: string;
   ownerDepartment: Department;
   creator: { id: string; fullName: string };
-  updater?: { id: string; fullName: string };
   status: string;
   statusLabel: string;
   statusColor: string;
@@ -322,14 +319,22 @@ function ApprovalStatusBadge({ task }: { task: Pick<Task, "approvalStatus" | "ap
   );
 }
 
-function getLatestReviewFeedback(task: Task) {
-  return [...(task.feedbacks || [])]
-    .reverse()
-    .find((feedback) => feedback.type === "REVIEW");
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("vi-VN");
+function formatFeedbackTime(value: string) {
+  return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatFeedbackDate(value: string) {
+  return new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export default function TasksPage() {
@@ -363,6 +368,7 @@ export default function TasksPage() {
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteFeedbackId, setConfirmDeleteFeedbackId] = useState<string | null>(null);
   const [confirmTaskAction, setConfirmTaskAction] = useState<{
     type: "finalize" | "unfinalize";
     taskId: string;
@@ -633,6 +639,21 @@ export default function TasksPage() {
     }
   };
 
+  const handleDeleteFeedback = async (feedbackId: string) => {
+    if (!detailTask) return;
+    try {
+      await apiFetch(`/tasks/${detailTask.id}/directives/${feedbackId}`, { method: "DELETE" });
+      const feedbacks = (detailTask.feedbacks || []).filter((feedback) => feedback.id !== feedbackId);
+      setDetailTask({ ...detailTask, feedbacks });
+      setSelectedTask((task) => task?.id === detailTask.id ? { ...task, feedbacks } : task);
+      setDeleteMsg("Xóa ý kiến chỉ đạo thành công");
+      setTimeout(() => setDeleteMsg(null), 8000);
+    } catch (err: any) {
+      setDeleteMsg(err.message || "Xóa ý kiến chỉ đạo thất bại");
+      setTimeout(() => setDeleteMsg(null), 8000);
+    }
+  };
+
   const handleViewDetail = async (task: Task) => {
     setSelectedTask(task);
     setLoadingDetail(true);
@@ -718,6 +739,7 @@ export default function TasksPage() {
       });
       setDetailTask(res.data);
       setEditingDetail(false);
+      window.dispatchEvent(new Event("inbox:refresh"));
       if (closeAfterSave) setSelectedTask(null);
       await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
       return true;
@@ -884,6 +906,19 @@ export default function TasksPage() {
           />
         );
       })()}
+      <ConfirmDialog
+        open={Boolean(confirmDeleteFeedbackId)}
+        title="Xóa ý kiến chỉ đạo?"
+        description="Ý kiến này sẽ bị xóa khỏi lịch sử trao đổi và không thể khôi phục."
+        confirmLabel="Xóa ý kiến"
+        confirmVariant="destructive"
+        onCancel={() => setConfirmDeleteFeedbackId(null)}
+        onConfirm={() => {
+          const feedbackId = confirmDeleteFeedbackId;
+          setConfirmDeleteFeedbackId(null);
+          if (feedbackId) void handleDeleteFeedback(feedbackId);
+        }}
+      />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -1242,16 +1277,21 @@ export default function TasksPage() {
 
       {/* Detail modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={requestCloseDetail} />
-          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-full sm:max-w-5xl max-h-[90vh] overflow-y-auto mx-4 ring-1 ring-foreground/5">
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground">
-                {editingDetail
-                  ? isCompletionOnly ? "Cập nhật kết quả hoàn thành" : "Chỉnh sửa nhiệm vụ"
-                  : "Chi tiết nhiệm vụ"}
-              </h2>
-              <div className="flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+          <div className="fixed inset-0 cursor-pointer bg-slate-950/45 backdrop-blur-sm" onClick={requestCloseDetail} />
+          <div className="relative flex max-h-[min(92vh,900px)] w-full max-w-6xl flex-col overflow-hidden rounded-[24px] border border-white/70 bg-card shadow-[0_24px_80px_-20px_rgba(15,23,42,0.45)] ring-1 ring-foreground/5">
+            <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border/80 bg-card/95 px-5 py-4 backdrop-blur-xl sm:px-6">
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-primary/75">
+                  {editingDetail ? isCompletionOnly ? "Cập nhật kết quả" : "Chỉnh sửa nhiệm vụ" : "Chi tiết nhiệm vụ"}
+                </p>
+                {!editingDetail && detailTask && (
+                  <h2 className="mt-1 line-clamp-2 text-base font-semibold leading-6 text-foreground sm:text-lg">
+                    {detailTask.title}
+                  </h2>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                 {editingDetail ? (
                   <>
                     <Button
@@ -1319,65 +1359,63 @@ export default function TasksPage() {
                     )}
                     <button
                       onClick={requestCloseDetail}
-                      className="text-muted-foreground hover:text-foreground"
+                      aria-label="Đóng chi tiết nhiệm vụ"
+                      className="ml-1 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
-                      <X className="h-5 w-5" />
+                      <X className="h-4 w-4" />
                     </button>
                   </>
                 )}
               </div>
             </div>
-            <div className="p-4">
+            <div className="min-h-0 overflow-y-auto bg-muted/20 p-4 sm:p-6">
               {loadingDetail ? (
                 <div className="flex items-center justify-center py-8 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin mr-2" />
                   Đang tải...
                 </div>
               ) : detailTask ? (
-                <div className="space-y-5">
-                  {/* Header: Task code + Title + Status */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
+                <div className="space-y-4">
+                  {/* Overview */}
+                  <div className="rounded-xl border border-border/70 bg-card px-4 py-3.5 shadow-sm sm:px-5">
+                    <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
                       {editingDetail ? (
                         <input
                           type="text"
                           value={editFormData.title}
                           onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
                           disabled={isCompletionOnly}
-                          className="h-8 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
+                          className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm shadow-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/15"
                         />
-                      ) : (
-                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                          <h3 className="min-w-0 text-lg font-semibold leading-tight text-foreground">{detailTask.title}</h3>
-                          {detailTask.priority === "URGENT" && <PriorityBadge value={detailTask.priority} />}
-                        </div>
-                      )}
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Tạo bởi {detailTask.creator?.fullName} - {formatDate(detailTask.createdAt)}
-                        {detailTask.updater && ` · Cập nhật bởi ${detailTask.updater.fullName}`}
+                      ) : null}
+                      <p className="text-xs leading-5 text-muted-foreground">
+                        <span className="font-medium text-foreground/70">Tạo bởi</span> {detailTask.creator?.fullName} · {formatDate(detailTask.createdAt)}
                       </p>
                     </div>
                     {!editingDetail && (
                       <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                        {detailTask.priority === "URGENT" && <PriorityBadge value={detailTask.priority} />}
                         {detailTask.isFinalized && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 ring-1 ring-amber-200">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
                             <Lock className="h-3 w-3" />
                             Đã chốt
                           </span>
                         )}
-                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${STATUS_COLORS[detailTask.status] || "bg-gray-100 text-gray-600"}`}>
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${STATUS_COLORS[detailTask.status] || "bg-gray-100 text-gray-600"}`}>
                           {detailTask.statusLabel}
                         </span>
                       </div>
                     )}
+                    </div>
                   </div>
 
                   {/* Section 1: Thông tin chung */}
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <div className="bg-muted/50 px-4 py-2 border-b border-border">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Thông tin chung</h4>
+                  <div className="overflow-hidden rounded-2xl border border-border/70 border-l-4 border-l-primary/40 bg-card shadow-sm">
+                    <div className="border-b border-border/70 px-5 py-3.5 sm:px-6">
+                      <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">Thông tin chung</h4>
                     </div>
-                    <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3">
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-5 sm:grid-cols-2 sm:p-6">
                       <div>
                         <label className="text-xs text-muted-foreground">Nguồn giao NV <span className="text-destructive">*</span></label>
                         {editingDetail ? (
@@ -1442,11 +1480,11 @@ export default function TasksPage() {
                   </div>
 
                   {/* Section 2: Đơn vị */}
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <div className="bg-muted/50 px-4 py-2 border-b border-border">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Đơn vị liên quan</h4>
+                  <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+                    <div className="border-b border-border/70 px-5 py-3.5 sm:px-6">
+                      <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">Đơn vị liên quan</h4>
                     </div>
-                    <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3">
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-5 sm:grid-cols-2 sm:p-6">
                       <div>
                         <label className="text-xs text-muted-foreground">Đơn vị thực hiện <span className="text-destructive">*</span></label>
                         <p className="text-sm font-medium text-foreground mt-0.5 flex items-center gap-1.5">
@@ -1466,11 +1504,11 @@ export default function TasksPage() {
                   </div>
 
                   {/* Section 3: Tiến độ */}
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <div className="bg-muted/50 px-4 py-2 border-b border-border">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tiến độ hoàn thành</h4>
+                  <div className="overflow-hidden rounded-2xl border border-border/70 border-l-4 border-l-emerald-400/60 bg-card shadow-sm">
+                    <div className="border-b border-border/70 px-5 py-3.5 sm:px-6">
+                      <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">Tiến độ hoàn thành</h4>
                     </div>
-                    <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3">
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-5 p-5 sm:grid-cols-2 sm:p-6">
                       <div>
                         <label className="text-xs text-muted-foreground">Ngày YC hoàn thành</label>
                         {editingDetail ? (
@@ -1487,7 +1525,7 @@ export default function TasksPage() {
                           <p className="text-sm font-medium text-foreground mt-0.5">{detailTask.actualCompletionDate ? formatDate(detailTask.actualCompletionDate) : "—"}</p>
                         )}
                       </div>
-                      <div className="col-span-2">
+                      <div className="col-span-2 rounded-xl bg-muted/30 p-4">
                         <label className="text-xs text-muted-foreground">Bằng chứng hoàn thành</label>
                         {editingDetail ? (
                           <textarea value={editFormData.completionEvidence} onChange={(e) => setEditFormData({ ...editFormData, completionEvidence: e.target.value })} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
@@ -1515,12 +1553,11 @@ export default function TasksPage() {
                   )}
 
                   {(detailTask.approvalStatus !== "NOT_SUBMITTED" || (detailTask.feedbacks || []).length > 0) && (() => {
-                    const latestReview = getLatestReviewFeedback(detailTask);
-                    const directives = (detailTask.feedbacks || []).filter((feedback) => feedback.type === "DIRECTIVE");
+                    const feedbacks = detailTask.feedbacks || [];
                     return (
-                      <div className="rounded-lg border border-border overflow-hidden">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-2">
-                          <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phản hồi xử lý</h4>
+                      <div className={`overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm ${detailTask.approvalStatus === "NEEDS_REVISION" ? "border-l-4 border-l-red-400" : "border-l-4 border-l-primary/30"}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-5 py-3.5 sm:px-6">
+                          <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">Phản hồi xử lý</h4>
                           <ApprovalStatusBadge task={detailTask} />
                         </div>
                         <div className="space-y-3 p-4">
@@ -1530,43 +1567,83 @@ export default function TasksPage() {
                             </p>
                           )}
 
-                          {detailTask.approvalStatus === "APPROVED" && latestReview?.decision === "APPROVED" && (
-                            <div className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
-                              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                              <div>
-                                <p className="font-semibold">Đã duyệt hoàn thành</p>
-                                <p className="mt-0.5 text-xs text-emerald-700">
-                                  {latestReview.author.fullName} · {formatDateTime(latestReview.createdAt)}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
-                          {detailTask.approvalStatus === "NEEDS_REVISION" && latestReview && (
-                            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
-                              <div className="flex items-center gap-2 font-semibold">
-                                <MessageSquare className="h-4 w-4" />
-                                Yêu cầu bổ sung từ {latestReview.author.fullName}
-                              </div>
-                              <p className="mt-1 whitespace-pre-wrap leading-relaxed">{latestReview.content}</p>
-                              <p className="mt-1 text-xs text-red-700">{formatDateTime(latestReview.createdAt)}</p>
-                            </div>
-                          )}
-
-                          {directives.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                                <MessageSquare className="h-3.5 w-3.5" />
-                                Ý kiến chỉ đạo
-                              </p>
-                              {directives.map((feedback) => (
-                                <div key={feedback.id} className="rounded-lg border border-blue-200 bg-blue-50/60 px-3 py-2.5 text-sm text-blue-900">
-                                  <p className="whitespace-pre-wrap leading-relaxed">{feedback.content}</p>
-                                  <p className="mt-1 text-xs text-blue-700">
-                                    {feedback.author.fullName} · {formatDateTime(feedback.createdAt)}
-                                  </p>
+                          {feedbacks.length > 0 && (
+                            <div className="rounded-xl border border-border/70 bg-card p-3 shadow-sm">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">Lịch sử phản hồi</p>
+                                  <p className="mt-1 text-xs text-muted-foreground">Theo dõi toàn bộ trao đổi của nhiệm vụ</p>
                                 </div>
-                              ))}
+                                <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                                  {feedbacks.length} phản hồi
+                                </span>
+                              </div>
+                              <div className="mt-4 max-h-[360px] space-y-5 overflow-y-auto pr-1">
+                                {["DIRECTIVE", "REVIEW"].map((groupType) => {
+                                  const groupItems = feedbacks
+                                    .filter((feedback) => feedback.type === groupType)
+                                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                                  if (groupItems.length === 0) return null;
+                                  const isDirectiveGroup = groupType === "DIRECTIVE";
+                                  const hasRevision = groupItems.some((feedback) => feedback.decision === "NEEDS_REVISION");
+                                  const groupTitle = isDirectiveGroup ? "Ý kiến chỉ đạo" : hasRevision ? "Yêu cầu bổ sung" : "Đã duyệt hoàn thành";
+                                  const groupTitleTone = isDirectiveGroup ? "text-foreground" : hasRevision ? "text-red-700" : "text-emerald-700";
+                                  return (
+                                    <div key={groupType}>
+                                      <div className="mb-2 flex items-center justify-between gap-3">
+                                        <p className={`flex items-center gap-2 text-xs font-semibold ${groupTitleTone}`}>
+                                          <span className={`h-2 w-2 rounded-full ${isDirectiveGroup ? "bg-blue-500" : hasRevision ? "bg-red-500" : "bg-emerald-500"}`} />
+                                          {groupTitle}
+                                        </p>
+                                      </div>
+                                      <div className="relative space-y-2 pl-4">
+                                        <span className="absolute bottom-3 left-[3px] top-3 w-px bg-border" />
+                                        {groupItems.map((feedback) => {
+                                          const isApproved = feedback.decision === "APPROVED";
+                                          const title = isDirectiveGroup || !isApproved ? null : "Đã duyệt hoàn thành";
+                                          const tone = isDirectiveGroup
+                                            ? "border-blue-200/80 bg-blue-50/40"
+                                            : isApproved
+                                              ? "border-emerald-200/80 bg-emerald-50/40"
+                                              : "border-red-200/80 bg-red-50/40";
+                                          const dot = isDirectiveGroup ? "bg-blue-500" : isApproved ? "bg-emerald-500" : "bg-red-500";
+                                          return (
+                                            <div key={feedback.id} className="relative pl-4">
+                                              <span className={`absolute left-[-1px] top-3 h-2 w-2 rounded-full ${dot} ring-4 ring-card`} />
+                                              <div className={`rounded-xl border px-3.5 py-3 ${tone}`}>
+                                                <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                                  <span className="text-sm font-medium text-foreground">{feedback.author.fullName}</span>
+                                                  <span className="flex items-center gap-2">
+                                                    <span className="flex flex-col items-end text-[11px] leading-tight text-muted-foreground">
+                                                      <span className="font-semibold text-foreground">{formatFeedbackTime(feedback.createdAt)}</span>
+                                                      <span className="mt-0.5">{formatFeedbackDate(feedback.createdAt)}</span>
+                                                    </span>
+                                                    {isDirectiveGroup && feedback.author.id === userInfo?.id && !detailTask.isFinalized && (
+                                                      <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon-xs"
+                                                        className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                                                        aria-label="Xóa ý kiến chỉ đạo"
+                                                        title="Xóa ý kiến chỉ đạo"
+                                                        onClick={() => setConfirmDeleteFeedbackId(feedback.id)}
+                                                      >
+                                                        <Trash2 />
+                                                      </Button>
+                                                    )}
+                                                  </span>
+                                                </div>
+                                                {title && <p className={`mt-1 text-xs font-semibold ${isApproved ? "text-emerald-700" : "text-red-700"}`}>{title}</p>}
+                                                {feedback.content && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{feedback.content}</p>}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>

@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Search,
   Send,
+  Trash2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -80,7 +81,21 @@ function formatDate(value?: string) {
 }
 
 function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("vi-VN");
+  return new Date(value).toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatFeedbackTime(value: string) {
+  return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatFeedbackDate(value: string) {
+  return new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function getPriorityLabel(priority: ApprovalTask["priority"]) {
@@ -101,6 +116,9 @@ export default function ApprovalsPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [feedbackToDelete, setFeedbackToDelete] = useState<TaskFeedback | null>(null);
+  const [deletingFeedback, setDeletingFeedback] = useState(false);
 
   const fetchTasks = async (page = pagination.page, query = search) => {
     setLoading(true);
@@ -121,8 +139,9 @@ export default function ApprovalsPage() {
   };
 
   useEffect(() => {
-    apiFetch<{ data: { role: string } }>("/auth/me")
+    apiFetch<{ data: { id: string; role: string } }>("/auth/me")
       .then((res) => {
+        setCurrentUserId(res.data.id);
         if (!REVIEWER_ROLES.includes(res.data.role)) {
           router.replace("/dashboard");
           return;
@@ -158,6 +177,7 @@ export default function ApprovalsPage() {
     try {
       await apiFetch(`/tasks/${selectedTask.id}/approve`, { method: "PATCH" });
       setMessage("Đã duyệt hoàn thành nhiệm vụ");
+      window.dispatchEvent(new Event("inbox:refresh"));
       setSelectedTask(null);
       await fetchTasks(1, search);
     } catch (err: any) {
@@ -179,6 +199,7 @@ export default function ApprovalsPage() {
         body: JSON.stringify({ content: note.trim() }),
       });
       setMessage("Đã gửi yêu cầu bổ sung");
+      window.dispatchEvent(new Event("inbox:refresh"));
       setSelectedTask(null);
       await fetchTasks(1, search);
     } catch (err: any) {
@@ -206,6 +227,24 @@ export default function ApprovalsPage() {
     }
   };
 
+  const handleDeleteDirective = async () => {
+    if (!selectedTask || !feedbackToDelete) return;
+    setDeletingFeedback(true);
+    try {
+      await apiFetch(`/tasks/${selectedTask.id}/directives/${feedbackToDelete.id}`, { method: "DELETE" });
+      setSelectedTask({
+        ...selectedTask,
+        feedbacks: (selectedTask.feedbacks || []).filter((feedback) => feedback.id !== feedbackToDelete.id),
+      });
+      setFeedbackToDelete(null);
+      setMessage("Đã xóa ý kiến chỉ đạo");
+    } catch (err: any) {
+      setError(err.message || "Không thể xóa ý kiến chỉ đạo");
+    } finally {
+      setDeletingFeedback(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <ConfirmDialog
@@ -219,6 +258,16 @@ export default function ApprovalsPage() {
           void handleApprove();
         }}
         loading={submitting}
+      />
+      <ConfirmDialog
+        open={Boolean(feedbackToDelete)}
+        title="Xóa ý kiến chỉ đạo?"
+        description="Ý kiến này sẽ bị xóa khỏi lịch sử trao đổi và không thể khôi phục."
+        confirmLabel="Xóa ý kiến"
+        confirmVariant="destructive"
+        onCancel={() => setFeedbackToDelete(null)}
+        onConfirm={() => void handleDeleteDirective()}
+        loading={deletingFeedback}
       />
       {(error || message) && (
         <div className={cn(
@@ -367,35 +416,116 @@ export default function ApprovalsPage() {
                 </div>
 
                 {selectedTask.feedbacks && selectedTask.feedbacks.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lịch sử phản hồi</p>
-                    {selectedTask.feedbacks.map((feedback) => (
-                      <div key={feedback.id} className="rounded-lg border border-border px-3 py-2">
-                        <div className="flex flex-wrap justify-between gap-2 text-xs">
-                          <span className="font-semibold">{feedback.type === "DIRECTIVE" ? "Ý kiến chỉ đạo" : feedback.decision === "APPROVED" ? "Đã duyệt" : "Yêu cầu bổ sung"}</span>
-                          <span className="text-muted-foreground">{feedback.author.fullName} · {formatDateTime(feedback.createdAt)}</span>
-                        </div>
-                        <p className="mt-1 whitespace-pre-wrap text-sm">{feedback.content}</p>
+                  <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-foreground">Lịch sử phản hồi</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Theo dõi toàn bộ trao đổi của nhiệm vụ</p>
                       </div>
-                    ))}
+                      <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                        {selectedTask.feedbacks.length} phản hồi
+                      </span>
+                    </div>
+                    <div className="mt-4 max-h-[360px] space-y-5 overflow-y-auto pr-1">
+                      {(["DIRECTIVE", "REVIEW"] as const).map((groupType) => {
+                        const groupItems = selectedTask.feedbacks!
+                          .filter((feedback) => feedback.type === groupType)
+                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+                        if (groupItems.length === 0) return null;
+                        const isDirectiveGroup = groupType === "DIRECTIVE";
+                        const hasRevision = groupItems.some((feedback) => feedback.decision === "NEEDS_REVISION");
+                        const groupTitle = isDirectiveGroup ? "Ý kiến chỉ đạo" : hasRevision ? "Yêu cầu bổ sung" : "Đã duyệt hoàn thành";
+                        const groupTitleTone = isDirectiveGroup ? "text-foreground" : hasRevision ? "text-red-700" : "text-emerald-700";
+                        return (
+                          <div key={groupType}>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <p className={`flex items-center gap-2 text-xs font-semibold ${groupTitleTone}`}>
+                                <span className={`h-2 w-2 rounded-full ${isDirectiveGroup ? "bg-blue-500" : hasRevision ? "bg-red-500" : "bg-emerald-500"}`} />
+                                {groupTitle}
+                              </p>
+                            </div>
+                            <div className="relative space-y-2 pl-4">
+                              <span className="absolute bottom-3 left-[3px] top-3 w-px bg-border" />
+                              {groupItems.map((feedback) => {
+                                const isApproved = feedback.decision === "APPROVED";
+                                const title = isDirectiveGroup || !isApproved ? null : "Đã duyệt hoàn thành";
+                                const tone = isDirectiveGroup
+                                  ? "border-blue-200/80 bg-blue-50/40"
+                                  : isApproved
+                                    ? "border-emerald-200/80 bg-emerald-50/40"
+                                    : "border-red-200/80 bg-red-50/40";
+                                const dot = isDirectiveGroup ? "bg-blue-500" : isApproved ? "bg-emerald-500" : "bg-red-500";
+                                return (
+                                  <div key={feedback.id} className="relative pl-4">
+                                    <span className={`absolute left-[-1px] top-3 h-2 w-2 rounded-full ${dot} ring-4 ring-card`} />
+                                    <div className={`rounded-xl border px-3.5 py-3 ${tone}`}>
+                                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                        <span className="text-sm font-medium text-foreground">{feedback.author.fullName}</span>
+                                        <span className="flex items-center gap-2">
+                                                    <span className="flex flex-col items-end text-[11px] leading-tight text-muted-foreground">
+                                                      <span className="font-semibold text-foreground">{formatFeedbackTime(feedback.createdAt)}</span>
+                                                      <span className="mt-0.5">{formatFeedbackDate(feedback.createdAt)}</span>
+                                                    </span>
+                                          {isDirectiveGroup && feedback.author.id === currentUserId && (
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="icon-xs"
+                                              className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                                              aria-label="Xóa ý kiến chỉ đạo"
+                                              title="Xóa ý kiến chỉ đạo"
+                                              onClick={() => setFeedbackToDelete(feedback)}
+                                            >
+                                              <Trash2 />
+                                            </Button>
+                                          )}
+                                        </span>
+                                      </div>
+                                      {title && <p className={`mt-1 text-xs font-semibold ${isApproved ? "text-emerald-700" : "text-red-700"}`}>{title}</p>}
+                                      {feedback.content && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{feedback.content}</p>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
-                <div className="space-y-3 border-t border-border pt-4">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Ý kiến chỉ đạo</label>
-                    <div className="mt-1 flex items-end gap-2">
-                      <textarea value={directive} onChange={(event) => setDirective(event.target.value)} rows={2} maxLength={2000} placeholder="Nhập ý kiến chỉ đạo..." className="min-h-[64px] flex-1 resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none ring-1 ring-foreground/5 focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                      <Button type="button" variant="outline" size="sm" onClick={handleDirective} disabled={submitting || !directive.trim()}><Send />Gửi</Button>
+                <div className="rounded-2xl border border-primary/15 bg-primary/[0.03] p-4 shadow-sm">
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <MessageSquare className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Xử lý nhiệm vụ</p>
+                      <p className="text-xs text-muted-foreground">Gửi chỉ đạo hoặc phản hồi hồ sơ hoàn thành</p>
                     </div>
                   </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Phản hồi hồ sơ hoàn thành</label>
-                    <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={2} maxLength={2000} placeholder="Nhập lý do nếu cần bổ sung..." className="mt-1 min-h-[64px] w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none ring-1 ring-foreground/5 focus:border-primary focus:ring-2 focus:ring-primary/20" />
-                  </div>
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <Button type="button" variant="outline" size="sm" onClick={handleRequestRevision} disabled={submitting || !note.trim()} className="text-red-700 hover:bg-red-50 hover:text-red-700"><AlertTriangle />Yêu cầu bổ sung</Button>
-                    <Button type="button" size="sm" onClick={() => setConfirmApprove(true)} disabled={submitting}>{submitting ? <Loader2 className="animate-spin" /> : <CheckCheck />}Duyệt hoàn thành</Button>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-xl border border-border/70 bg-card p-3">
+                      <label className="text-xs font-semibold text-foreground">Ý kiến chỉ đạo</label>
+                      <textarea value={directive} onChange={(event) => setDirective(event.target.value)} rows={3} maxLength={2000} placeholder="Nhập nội dung chỉ đạo..." className="mt-2 min-h-[82px] w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                      <div className="mt-2 flex justify-end">
+                        <Button type="button" variant="outline" size="sm" onClick={handleDirective} disabled={submitting || !directive.trim()}><Send />Gửi ý kiến</Button>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-card p-3">
+                      <label className="text-xs font-semibold text-foreground">Phản hồi hồ sơ hoàn thành</label>
+                      <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} maxLength={2000} placeholder="Nhập lý do nếu cần bổ sung..." className="mt-2 min-h-[82px] w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20" />
+                      <div className="mt-2 flex justify-end">
+                        <Button type="button" variant="outline" size="sm" onClick={handleRequestRevision} disabled={submitting || !note.trim()} className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-700"><AlertTriangle />Yêu cầu bổ sung</Button>
+                      </div>
+                    </div>
+                    <div className="flex justify-end lg:col-span-2">
+                      <Button type="button" size="sm" onClick={() => setConfirmApprove(true)} disabled={submitting} className="shrink-0 bg-emerald-600 text-white hover:bg-emerald-700">
+                        {submitting ? <Loader2 className="animate-spin" /> : <CheckCheck />}
+                        Duyệt
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
