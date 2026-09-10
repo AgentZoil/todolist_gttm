@@ -51,6 +51,7 @@ model User {
   updatedTasks Task[]          @relation("TaskUpdater")
   auditLogs    AuditLog[]
   taskFeedbacks TaskFeedback[]
+  taskFeedbackReads TaskFeedbackRead[]
 
   @@map("users")
 }
@@ -147,9 +148,23 @@ model TaskFeedback {
 
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  readReceipts TaskFeedbackRead[]
 
   @@index([taskId, createdAt])
   @@map("task_feedbacks")
+}
+
+model TaskFeedbackRead {
+  feedbackId String   @map("feedback_id")
+  userId     String   @map("user_id")
+  readAt     DateTime @default(now()) @map("read_at")
+
+  feedback TaskFeedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([feedbackId, userId])
+  @@index([userId, readAt])
+  @@map("task_feedback_reads")
 }
 
 model TaskCoordinatingDepartment {

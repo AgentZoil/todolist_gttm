@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Inbox, LogOut, User } from "lucide-react";
@@ -13,6 +13,7 @@ export function Header() {
   const [role, setRole] = useState<string>("");
   const [inboxCount, setInboxCount] = useState(0);
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
 
   useEffect(() => {
@@ -39,9 +40,13 @@ export function Header() {
     };
 
     loadInboxCount();
+    window.addEventListener("inbox:refresh", loadInboxCount);
     const timer = window.setInterval(loadInboxCount, 60_000);
-    return () => window.clearInterval(timer);
-  }, [role]);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("inbox:refresh", loadInboxCount);
+    };
+  }, [role, pathname]);
 
   async function handleLogout() {
     await supabase.auth.signOut();

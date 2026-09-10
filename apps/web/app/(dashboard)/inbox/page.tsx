@@ -2,44 +2,31 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Inbox, Loader2, MessageSquare, RefreshCw } from "lucide-react";
+import { AlertTriangle, ChevronRight, Inbox, Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
 interface Feedback {
-  id: string;
   type: "DIRECTIVE" | "REVIEW";
   decision?: "APPROVED" | "NEEDS_REVISION";
-  content: string;
-  createdAt: string;
   author: { fullName: string };
 }
 
 interface AttentionTask {
   id: string;
   title: string;
-  requiredCompletionDate?: string;
-  actualCompletionDate?: string;
   approvalStatus: "PENDING" | "APPROVED" | "NEEDS_REVISION" | "NOT_SUBMITTED";
-  updatedAt: string;
-  ownerDepartment: { id: string; name: string };
+  ownerDepartment: { id: string };
   feedbacks?: Feedback[];
 }
 
-function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleDateString("vi-VN") : "—";
-}
-
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("vi-VN");
-}
-
 function getLatestAttentionFeedback(task: AttentionTask) {
-  return task.feedbacks?.find(
-    (feedback) =>
-      (feedback.type === "REVIEW" && feedback.decision === "NEEDS_REVISION") ||
-      feedback.type === "DIRECTIVE",
-  );
+  if (task.approvalStatus === "NEEDS_REVISION") {
+    return task.feedbacks?.find(
+      (feedback) => feedback.type === "REVIEW" && feedback.decision === "NEEDS_REVISION",
+    );
+  }
+  return task.feedbacks?.find((feedback) => feedback.type === "DIRECTIVE");
 }
 
 export default function InboxPage() {
@@ -58,6 +45,17 @@ export default function InboxPage() {
       setError(err.message || "Không thể tải hộp công việc");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openTask = async (task: AttentionTask) => {
+    try {
+      await apiFetch(`/tasks/${task.id}/attention/read`, { method: "POST" });
+      window.dispatchEvent(new Event("inbox:refresh"));
+    } catch (err: any) {
+      setError(err.message || "Không thể cập nhật trạng thái đã đọc");
+    } finally {
+      router.push(`/tasks?departmentId=${encodeURIComponent(task.ownerDepartment.id)}&taskId=${encodeURIComponent(task.id)}`);
     }
   };
 
@@ -113,54 +111,55 @@ export default function InboxPage() {
           <p className="mt-1 text-sm text-muted-foreground">Phòng ban chưa có yêu cầu bổ sung hoặc ý kiến mới.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {tasks.map((task) => {
-            const feedback = getLatestAttentionFeedback(task);
-            const needsRevision = task.approvalStatus === "NEEDS_REVISION";
-            return (
-              <div key={task.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {needsRevision ? (
-                        <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
-                      ) : (
-                        <MessageSquare className="h-4 w-4 shrink-0 text-primary" />
-                      )}
-                      <h2 className="font-semibold text-foreground">{task.title}</h2>
-                      <span className={needsRevision
-                        ? "rounded-full bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700 ring-1 ring-red-200"
-                        : "rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 ring-1 ring-blue-200"}
-                      >
-                        {needsRevision ? "Cần bổ sung" : "Ý kiến chỉ đạo"}
+        <div className="overflow-hidden rounded-xl bg-card text-sm text-card-foreground ring-1 ring-foreground/10">
+          <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
+            <div>
+              <p className="font-semibold text-foreground">Cần xử lý</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">Phản hồi mới từ Lãnh đạo/Thư ký</p>
+            </div>
+            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary">
+              {tasks.length}
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {tasks.map((task) => {
+              const needsRevision = task.approvalStatus === "NEEDS_REVISION";
+              const feedback = getLatestAttentionFeedback(task);
+              return (
+                <div key={task.id} className="group flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/25 sm:flex-row sm:items-center sm:gap-5 sm:px-5">
+                  <div className={needsRevision
+                    ? "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-destructive"
+                    : "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent text-primary"}
+                  >
+                    {needsRevision ? <AlertTriangle className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className={needsRevision ? "font-semibold text-destructive" : "font-semibold text-primary"}>
+                        {needsRevision ? "Yêu cầu bổ sung" : "Ý kiến chỉ đạo"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        từ {feedback?.author.fullName || "Lãnh đạo/Thư ký"}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {task.ownerDepartment.name} · Cập nhật {formatDateTime(task.updatedAt)}
-                    </p>
+                    <div className="mt-1 flex min-w-0 items-baseline gap-1.5">
+                      <span className="shrink-0 text-xs text-muted-foreground">Nhiệm vụ:</span>
+                      <h2 className="line-clamp-2 font-medium leading-5 text-foreground">{task.title}</h2>
+                    </div>
                   </div>
                   <Button
+                    variant="outline"
                     size="sm"
-                    onClick={() => router.push(`/tasks?departmentId=${encodeURIComponent(task.ownerDepartment.id)}&taskId=${encodeURIComponent(task.id)}`)}
+                    className="shrink-0 self-start sm:self-center"
+                    onClick={() => void openTask(task)}
                   >
-                    Mở nhiệm vụ
+                    Xem chi tiết
+                    <ChevronRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-                {feedback && (
-                  <div className="mt-3 rounded-xl border border-border bg-muted/30 px-3 py-2.5">
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{feedback.content}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {feedback.author.fullName} · {formatDateTime(feedback.createdAt)}
-                    </p>
-                  </div>
-                )}
-                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-                  <span>Hạn hoàn thành: {formatDate(task.requiredCompletionDate)}</span>
-                  <span>Thực tế: {formatDate(task.actualCompletionDate)}</span>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

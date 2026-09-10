@@ -277,13 +277,21 @@ export class TasksService {
     };
   }
 
-  async findDepartmentAttention(departmentId: string) {
+  async findDepartmentAttention(departmentId: string, userId: string) {
     const where: any = {
       ownerDepartmentId: departmentId,
       isCancelled: false,
+      isFinalized: false,
       OR: [
         { approvalStatus: 'NEEDS_REVISION' },
-        { feedbacks: { some: { type: 'DIRECTIVE' } } },
+        {
+          feedbacks: {
+            some: {
+              type: 'DIRECTIVE',
+              readReceipts: { none: { userId } },
+            },
+          },
+        },
       ],
     };
 
@@ -324,6 +332,42 @@ export class TasksService {
         totalPages: tasks.length > 0 ? 1 : 0,
       },
     };
+  }
+
+  async markDepartmentAttentionRead(
+    taskId: string,
+    userId: string,
+    departmentId: string,
+  ) {
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { ownerDepartmentId: true },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+    if (task.ownerDepartmentId !== departmentId) {
+      throw new ForbiddenException('Bạn không có quyền cập nhật hộp công việc này');
+    }
+
+    const unreadDirectives = await this.prisma.taskFeedback.findMany({
+      where: {
+        taskId,
+        type: 'DIRECTIVE',
+        readReceipts: { none: { userId } },
+      },
+      select: { id: true },
+    });
+
+    if (unreadDirectives.length > 0) {
+      await this.prisma.taskFeedbackRead.createMany({
+        data: unreadDirectives.map((feedback) => ({
+          feedbackId: feedback.id,
+          userId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    return { success: true, marked: unreadDirectives.length };
   }
 
   async findOne(id: string) {
@@ -847,6 +891,42 @@ export class TasksService {
       entityId: id,
     });
     return feedback;
+  }
+
+  async removeDirective(taskId: string, feedbackId: string, deletedBy: string) {
+    const feedback = await this.prisma.taskFeedback.findUnique({
+      where: { id: feedbackId },
+      select: {
+        id: true,
+        taskId: true,
+        authorId: true,
+        type: true,
+        task: { select: { isFinalized: true } },
+      },
+    });
+
+    if (!feedback || feedback.taskId !== taskId) {
+      throw new NotFoundException('Không tìm thấy ý kiến chỉ đạo');
+    }
+    if (feedback.type !== 'DIRECTIVE') {
+      throw new ForbiddenException('Chỉ được xóa ý kiến chỉ đạo');
+    }
+    if (feedback.authorId !== deletedBy) {
+      throw new ForbiddenException('Bạn chỉ được xóa ý kiến do mình tạo');
+    }
+    if (feedback.task.isFinalized) {
+      throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể xóa ý kiến');
+    }
+
+    await this.prisma.taskFeedback.delete({ where: { id: feedbackId } });
+    await this.auditLogService.log({
+      userId: deletedBy,
+      action: 'DELETE_TASK_DIRECTIVE',
+      entityType: 'TASK',
+      entityId: taskId,
+    });
+
+    return { success: true };
   }
 
   async cancel(id: string, cancelledBy: string) {

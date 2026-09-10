@@ -67,12 +67,24 @@ export class TasksController {
   @Get('attention')
   @Roles('DEPARTMENT_EDITOR')
   async findDepartmentAttention(
-    @CurrentUser() user: { departmentId?: string | null },
+    @CurrentUser() user: { id: string; departmentId?: string | null },
   ) {
     if (!user.departmentId) {
       throw new ForbiddenException('Tài khoản phòng ban chưa được gắn đơn vị');
     }
-    return this.tasksService.findDepartmentAttention(user.departmentId);
+    return this.tasksService.findDepartmentAttention(user.departmentId, user.id);
+  }
+
+  @Post(':id/attention/read')
+  @Roles('DEPARTMENT_EDITOR')
+  async markDepartmentAttentionRead(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; departmentId?: string | null },
+  ) {
+    if (!user.departmentId) {
+      throw new ForbiddenException('Tài khoản phòng ban chưa được gắn đơn vị');
+    }
+    return this.tasksService.markDepartmentAttentionRead(id, user.id, user.departmentId);
   }
 
   @Get(':id')
@@ -195,6 +207,16 @@ export class TasksController {
   ) {
     const feedback = await this.tasksService.addDirective(id, user.id, body.content);
     return { data: feedback };
+  }
+
+  @Delete(':id/directives/:feedbackId')
+  @Roles('ADMIN', 'LEADER', 'SECRETARY')
+  async removeDirective(
+    @Param('id') id: string,
+    @Param('feedbackId') feedbackId: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.tasksService.removeDirective(id, feedbackId, user.id);
   }
 
   @Delete(':id')
