@@ -31,8 +31,8 @@ export class PeriodLockController {
     @CurrentUser() user: { id: string },
   ) {
     const lock = await this.periodLockService.lockPeriod(
-      parseInt(year),
-      parseInt(month),
+      Number(year),
+      Number(month),
       user.id,
     );
     return { data: lock };
@@ -41,7 +41,7 @@ export class PeriodLockController {
   @Delete(':year/:month')
   @Roles('ADMIN')
   async unlock(@Param('year') year: string, @Param('month') month: string) {
-    await this.periodLockService.unlockPeriod(parseInt(year), parseInt(month));
+    await this.periodLockService.unlockPeriod(Number(year), Number(month));
     return { message: 'Unlocked' };
   }
 }

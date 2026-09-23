@@ -124,7 +124,6 @@ model Task {
   creator             User                       @relation("TaskCreator", fields: [createdBy], references: [id])
   updater             User?                      @relation("TaskUpdater", fields: [updatedBy], references: [id])
   coordinatingDepts   TaskCoordinatingDepartment[]
-  auditLogs           AuditLog[]
   feedbacks           TaskFeedback[]
 
   @@index([ownerDepartmentId])
@@ -191,7 +190,6 @@ model AuditLog {
   createdAt  DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id])
-  task Task? @relation(fields: [entityId], references: [id])
 
   @@index([userId])
   @@index([entityId])

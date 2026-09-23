@@ -1,4 +1,4 @@
-import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -11,7 +11,6 @@ import { TasksModule } from './tasks/tasks.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { PeriodLockModule } from './period-lock/period-lock.module';
 import { DashboardModule } from './dashboard/dashboard.module';
-import { CurrentUserMiddleware } from './auth/current-user.middleware';
 
 @Module({
   imports: [
@@ -39,8 +38,4 @@ import { CurrentUserMiddleware } from './auth/current-user.middleware';
     },
   ],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    consumer.apply(CurrentUserMiddleware).forRoutes('{*path}');
-  }
-}
+export class AppModule {}

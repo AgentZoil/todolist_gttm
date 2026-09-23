@@ -10,6 +10,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
+  @Roles('ADMIN', 'SECRETARY')
   async findAll() {
     const users = await this.usersService.findAll();
     return { data: users };

@@ -10,14 +10,16 @@ export class UsersService {
   ) {}
 
   async findAll() {
-    const users = await this.prisma.user.findMany({
-      include: { role: true, department: true },
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        isActive: true,
+        role: { select: { id: true, name: true } },
+        department: { select: { id: true, code: true, name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    return users.map((user) => ({
-      ...user,
-      department: user.department,
-    }));
   }
 
   async create(data: {

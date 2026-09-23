@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { calculateTaskStatus } from '../tasks/status';
 
@@ -40,13 +40,20 @@ export class DashboardService {
     actualCompletionDate: Date | null;
     approvedStatus: string | null;
   }) {
+    if (task.isCancelled) return 'CANCELLED';
     return task.approvedStatus ?? calculateTaskStatus(task);
   }
 
+  private getTargetMonth(month?: string) {
+    const targetMonth = month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(targetMonth)) {
+      throw new BadRequestException('Tháng dashboard không hợp lệ');
+    }
+    return targetMonth;
+  }
+
   async getSummary(month?: string) {
-    const targetMonth =
-      month ||
-      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const targetMonth = this.getTargetMonth(month);
     const cacheKey = `summary:${targetMonth}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;
@@ -104,6 +111,7 @@ export class DashboardService {
     const noEvaluation = enrichedTasks.filter(
       (t) => t.status === 'NO_EVALUATION',
     ).length;
+    const ratedTotal = total - noEvaluation;
 
     const result = {
       month: targetMonth,
@@ -112,7 +120,8 @@ export class DashboardService {
       inProgress,
       overdue,
       noEvaluation,
-      completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+      completionRate:
+        ratedTotal > 0 ? Math.round((completed / ratedTotal) * 100) : 0,
     };
 
     this.setCache(cacheKey, result);
@@ -120,9 +129,7 @@ export class DashboardService {
   }
 
   async getDepartments(month?: string) {
-    const targetMonth =
-      month ||
-      `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const targetMonth = this.getTargetMonth(month);
     const cacheKey = `departments:${targetMonth}`;
     const cached = this.getCache(cacheKey);
     if (cached) return cached;

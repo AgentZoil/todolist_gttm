@@ -344,16 +344,6 @@ function ApprovalStatusBadge({ task }: { task: Pick<Task, "approvalStatus" | "ap
   );
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
@@ -495,9 +485,11 @@ export default function TasksPage() {
       })
       .then(([user, depts]) => {
         if (depts && depts.length > 0) {
-          const defaultDept = user.role === "DEPARTMENT_EDITOR"
-            ? user.departmentId || ""
-            : urlDeptId;
+          // A dashboard deep-link is an explicit request to inspect that department.
+          // Keep the editor's own department as the fallback for a normal visit.
+          const defaultDept = urlDeptId || (
+            user.role === "DEPARTMENT_EDITOR" ? user.departmentId || "" : ""
+          );
           setFilterStatus(urlStatus);
           setFilterDateFrom(urlDateFrom);
           setFilterDateTo(urlDateTo);

@@ -68,7 +68,7 @@ export default function AuditLogsPage() {
   useEffect(() => {
     apiFetch<{ data: { role: string } }>("/auth/me")
       .then((res) => {
-        if (!["ADMIN", "SECRETARY"].includes(res.data.role)) {
+        if (res.data.role !== "ADMIN") {
           router.replace("/dashboard");
           return;
         }

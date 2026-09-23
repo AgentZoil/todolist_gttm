@@ -1,7 +1,7 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AuthGuard } from './auth.guard';
 import { CurrentUser } from './current-user.decorator';
-import type { CurrentUser as CurrentUserType } from './current-user.middleware';
+import type { CurrentUser as CurrentUserType } from './current-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Controller('auth')

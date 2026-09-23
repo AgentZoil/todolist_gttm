@@ -1,5 +1,6 @@
 import {
   Injectable,
+  BadRequestException,
   ForbiddenException,
   NotFoundException,
   ConflictException,
@@ -25,8 +26,6 @@ const NHOM_A_FIELDS = [
   'ownerDepartmentId',
   'requiredCompletionDate',
 ];
-
-const NHOM_B_FIELDS = ['actualCompletionDate', 'completionEvidence', 'incompleteReason'];
 
 const APPROVAL_STATUS_LABELS: Record<string, string> = {
   NOT_SUBMITTED: 'Chưa gửi',
@@ -97,12 +96,49 @@ export class TasksService {
       sortOrder = 'asc',
     } = params;
 
+    const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+    const safeLimit = Number.isInteger(limit) && limit > 0
+      ? Math.min(limit, 100)
+      : 20;
+    const allowedSortFields = [
+      'requiredCompletionDate',
+      'assignedDate',
+      'actualCompletionDate',
+      'createdAt',
+      'updatedAt',
+      'title',
+      'priority',
+    ];
+    const safeSortBy = allowedSortFields.includes(sortBy)
+      ? sortBy
+      : 'requiredCompletionDate';
+    const safeSortOrder = sortOrder === 'desc' ? 'desc' : 'asc';
+    const completionStatuses = [
+      'COMPLETED_EARLY',
+      'COMPLETED_ON_TIME',
+      'COMPLETED_LATE',
+    ];
+    const needsCompletionStatusFilter = completionStatuses.includes(status || '');
+    const allowedStatuses = [
+      'IN_PROGRESS',
+      'INCOMPLETE',
+      'COMPLETED_EARLY',
+      'COMPLETED_ON_TIME',
+      'COMPLETED_LATE',
+      'NO_EVALUATION',
+      'CANCELLED',
+    ];
+    if (status && !allowedStatuses.includes(status)) {
+      throw new BadRequestException('Trạng thái lọc không hợp lệ');
+    }
+
     const where: any = {};
     const andConditions: any[] = [];
     if (departmentId) where.ownerDepartmentId = departmentId;
     if (search) {
       andConditions.push({
         OR: [
+          { title: { contains: search, mode: 'insensitive' } },
           { content: { contains: search, mode: 'insensitive' } },
           { taskCode: { contains: search, mode: 'insensitive' } },
           { source: { contains: search, mode: 'insensitive' } },
@@ -131,12 +167,13 @@ export class TasksService {
     if (dateFrom || dateTo) {
       const dateFilter: any = {};
       if (dateFrom) {
-        const [year, month, day] = dateFrom.split('-').map(Number);
-        dateFilter.gte = new Date(year, month - 1, day, 0, 0, 0, 0);
+        dateFilter.gte = this.parseFilterDate(dateFrom, false);
       }
       if (dateTo) {
-        const [year, month, day] = dateTo.split('-').map(Number);
-        dateFilter.lte = new Date(year, month - 1, day, 23, 59, 59, 999);
+        dateFilter.lte = this.parseFilterDate(dateTo, true);
+      }
+      if (dateFilter.gte && dateFilter.lte && dateFilter.gte > dateFilter.lte) {
+        throw new BadRequestException('Khoảng ngày lọc không hợp lệ');
       }
       // Match dashboard month semantics: use deadline when present;
       // otherwise use assigned date for NO_EVALUATION tasks.
@@ -153,10 +190,7 @@ export class TasksService {
 
     if (andConditions.length > 0) where.AND = andConditions;
 
-    const [tasks, total] = await Promise.all([
-      this.prisma.task.findMany({
-        where,
-        select: {
+    const taskSelect = {
           id: true,
           taskCode: true,
           title: true,
@@ -183,37 +217,74 @@ export class TasksService {
           creator: {
             select: { id: true, fullName: true },
           },
-        },
-        orderBy: { [sortBy]: sortOrder },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.task.count({ where }),
-    ]);
+    } as const;
 
-    let enrichedTasks = tasks.map((task) => this.enrichTask(task));
-
-    if (status === 'COMPLETED_EARLY' || status === 'COMPLETED_ON_TIME' || status === 'COMPLETED_LATE') {
-      enrichedTasks = enrichedTasks.filter((task) => {
+    let tasks: any[];
+    let total: number;
+    if (needsCompletionStatusFilter) {
+      const allMatchingTasks = await this.prisma.task.findMany({
+        where,
+        select: taskSelect,
+        orderBy: { [safeSortBy]: safeSortOrder },
+      });
+      const filteredTasks = allMatchingTasks.filter((task) => {
         if (!task.actualCompletionDate || !task.requiredCompletionDate) return false;
         const actual = new Date(task.actualCompletionDate).getTime();
         const required = new Date(task.requiredCompletionDate).getTime();
         if (status === 'COMPLETED_EARLY') return actual < required;
         if (status === 'COMPLETED_ON_TIME') return actual === required;
-        if (status === 'COMPLETED_LATE') return actual > required;
-        return true;
+        return actual > required;
       });
+      total = filteredTasks.length;
+      tasks = filteredTasks.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+    } else {
+      const result = await Promise.all([
+        this.prisma.task.findMany({
+          where,
+          select: taskSelect,
+          orderBy: { [safeSortBy]: safeSortOrder },
+          skip: (safePage - 1) * safeLimit,
+          take: safeLimit,
+        }),
+        this.prisma.task.count({ where }),
+      ]);
+      tasks = result[0];
+      total = result[1];
     }
+
+    let enrichedTasks = tasks.map((task) => this.enrichTask(task));
 
     return {
       data: enrichedTasks,
       pagination: {
-        page,
-        limit,
+        page: safePage,
+        limit: safeLimit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
+  }
+
+  private parseFilterDate(value: string, endOfDay: boolean): Date {
+    const [year, month, day] = value.split('-').map(Number);
+    const parsed = new Date(
+      year,
+      month - 1,
+      day,
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0,
+    );
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day
+    ) {
+      throw new BadRequestException('Ngày lọc không hợp lệ');
+    }
+    return parsed;
   }
 
   async findPendingApprovals(params: {
@@ -222,6 +293,10 @@ export class TasksService {
     search?: string;
   } = {}) {
     const { page = 1, limit = 20, search } = params;
+    const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+    const safeLimit = Number.isInteger(limit) && limit > 0
+      ? Math.min(limit, 100)
+      : 20;
     const where: any = {
       approvalStatus: 'PENDING',
       isCancelled: false,
@@ -266,8 +341,8 @@ export class TasksService {
           },
         },
         orderBy: { updatedAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
       }),
       this.prisma.task.count({ where }),
     ]);
@@ -275,10 +350,10 @@ export class TasksService {
     return {
       data: tasks.map((task) => this.enrichTask(task)),
       pagination: {
-        page,
-        limit,
+        page: safePage,
+        limit: safeLimit,
         total,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }
@@ -476,34 +551,42 @@ export class TasksService {
 
     const taskCode = `NV-${Date.now()}`;
 
-    const task = await this.prisma.task.create({
-      data: {
-        taskCode,
-        title: data.title,
-        content: data.content,
-        source: data.source,
-        assignedDate: new Date(data.assignedDate),
-        assignedBy: data.assignedBy,
-        priority: data.priority ?? 'NORMAL',
-        documentNumber: data.documentNumber,
-        coordinatingUnits: data.coordinatingUnits,
-        ownerDepartmentId: data.ownerDepartmentId,
-        requiredCompletionDate: data.requiredCompletionDate
-          ? new Date(data.requiredCompletionDate)
-          : null,
-        createdBy: data.createdBy,
-      },
-      include: {
-        ownerDepartment: true,
-      },
+    const task = await this.prisma.$transaction(async (tx) => {
+      const createdTask = await tx.task.create({
+        data: {
+          taskCode,
+          title: data.title,
+          content: data.content,
+          source: data.source,
+          assignedDate: new Date(data.assignedDate),
+          assignedBy: data.assignedBy,
+          priority: data.priority ?? 'NORMAL',
+          documentNumber: data.documentNumber,
+          coordinatingUnits: data.coordinatingUnits,
+          ownerDepartmentId: data.ownerDepartmentId,
+          requiredCompletionDate: data.requiredCompletionDate
+            ? new Date(data.requiredCompletionDate)
+            : null,
+          createdBy: data.createdBy,
+        },
+        include: {
+          ownerDepartment: true,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          userId: data.createdBy,
+          action: 'CREATE',
+          entityType: 'TASK',
+          entityId: createdTask.id,
+        },
+      });
+
+      return createdTask;
     });
 
-    await this.auditLogService.log({
-      userId: data.createdBy,
-      action: 'CREATE',
-      entityType: 'TASK',
-      entityId: task.id,
-    });
+    this.dashboardService.invalidate();
 
     return task;
   }
@@ -512,6 +595,7 @@ export class TasksService {
     task: any,
     data: Record<string, any>,
     userRole: string,
+    requiredCompletionDate = task.requiredCompletionDate,
   ) {
     if (task.isFinalized && userRole !== 'ADMIN') {
       throw new ForbiddenException(
@@ -522,12 +606,8 @@ export class TasksService {
     const nhomAKeys = Object.keys(data).filter((k) =>
       NHOM_A_FIELDS.includes(k),
     );
-    const nhomBKeys = Object.keys(data).filter((k) =>
-      NHOM_B_FIELDS.includes(k),
-    );
-
-    if (nhomAKeys.length > 0 && task.requiredCompletionDate) {
-      const d = new Date(task.requiredCompletionDate);
+    if (nhomAKeys.length > 0 && requiredCompletionDate) {
+      const d = new Date(requiredCompletionDate);
       const year = d.getFullYear();
       const month = d.getMonth() + 1;
       const isLocked = await this.periodLockService.isPeriodLocked(year, month);
@@ -633,8 +713,6 @@ export class TasksService {
       );
     }
 
-    await this.checkEditPermissions(oldTask, data, data.userRole);
-
     const assignedDate = data.assignedDate
       ? new Date(data.assignedDate)
       : oldTask.assignedDate;
@@ -642,6 +720,13 @@ export class TasksService {
       ? new Date(data.requiredCompletionDate)
       : oldTask.requiredCompletionDate;
     const actualCompletionDate = nextActualCompletionDate;
+
+    await this.checkEditPermissions(
+      oldTask,
+      data,
+      data.userRole,
+      requiredCompletionDate ?? oldTask.requiredCompletionDate,
+    );
 
     if (requiredCompletionDate && requiredCompletionDate < assignedDate) {
       throw new ForbiddenException(
@@ -675,7 +760,10 @@ export class TasksService {
       );
     }
 
-    const { userRole, userDepartmentId, expectedVersion, ...updateData } = data;
+    const updateData: Record<string, any> = { ...data };
+    delete updateData.userRole;
+    delete updateData.userDepartmentId;
+    delete updateData.expectedVersion;
 
     const prismaData: Record<string, any> = {
       version: { increment: 1 },
@@ -686,7 +774,7 @@ export class TasksService {
         prismaData.approvedStatus = calculateTaskStatus({
           isCancelled: oldTask.isCancelled,
           requiredCompletionDate: oldTask.requiredCompletionDate,
-          actualCompletionDate: oldTask.actualCompletionDate,
+          actualCompletionDate,
         });
       }
       prismaData.approvalStatus = actualCompletionDate
@@ -953,7 +1041,13 @@ export class TasksService {
     return { success: true };
   }
 
-  async cancel(id: string, cancelledBy: string) {
+  async cancel(id: string, cancelledBy: string, userRole: string) {
+    const existingTask = await this.prisma.task.findUnique({ where: { id } });
+    if (!existingTask) throw new NotFoundException('Task not found');
+    if (existingTask.isFinalized && userRole !== 'ADMIN') {
+      throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể hủy');
+    }
+
     const task = await this.prisma.task.update({
       where: { id },
       data: {
@@ -973,6 +1067,8 @@ export class TasksService {
       entityType: 'TASK',
       entityId: id,
     });
+
+    this.dashboardService.invalidate();
 
     return task;
   }
@@ -1078,15 +1174,20 @@ export class TasksService {
       throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể xóa');
     }
 
-    await this.prisma.taskCoordinatingDepartment.deleteMany({ where: { taskId: id } });
-    await this.prisma.task.delete({ where: { id } });
-
-    await this.auditLogService.log({
-      userId: deletedBy,
-      action: 'DELETE',
-      entityType: 'TASK',
-      entityId: id,
+    await this.prisma.$transaction(async (tx) => {
+      await tx.taskCoordinatingDepartment.deleteMany({ where: { taskId: id } });
+      await tx.task.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: {
+          userId: deletedBy,
+          action: 'DELETE',
+          entityType: 'TASK',
+          entityId: id,
+        },
+      });
     });
+
+    this.dashboardService.invalidate();
 
     return { success: true };
   }

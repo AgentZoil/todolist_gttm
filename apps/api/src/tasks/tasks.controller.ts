@@ -155,8 +155,11 @@ export class TasksController {
 
   @Patch(':id/cancel')
   @Roles('ADMIN', 'SECRETARY')
-  async cancel(@Param('id') id: string, @CurrentUser() user: { id: string }) {
-    const task = await this.tasksService.cancel(id, user.id);
+  async cancel(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+  ) {
+    const task = await this.tasksService.cancel(id, user.id, user.role);
     return { data: task };
   }
 

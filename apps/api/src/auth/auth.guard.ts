@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from './supabase.service';
 import { PrismaService } from '../prisma/prisma.service';
-import type { CurrentUser } from './current-user.middleware';
+import type { CurrentUser } from './current-user.type';
 
 export interface AuthUser {
   authUserId: string;

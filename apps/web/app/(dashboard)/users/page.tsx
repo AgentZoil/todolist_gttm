@@ -22,7 +22,6 @@ interface Department {
 interface User {
   id: string;
   fullName: string;
-  authUserId: string;
   isActive: boolean;
   role: Role;
   department?: Department | null;
