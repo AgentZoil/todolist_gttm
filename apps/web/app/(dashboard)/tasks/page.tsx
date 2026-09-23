@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { FeedbackTimeline } from "@/components/tasks/feedback-timeline";
 import {
   ListTodo,
   Plus,
@@ -353,14 +354,6 @@ function formatDateTime(value: string) {
   });
 }
 
-function formatFeedbackTime(value: string) {
-  return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatFeedbackDate(value: string) {
-  return new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
 export default function TasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
@@ -419,6 +412,7 @@ export default function TasksPage() {
   const canEditDetail = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY" ||
     (userInfo?.role === "DEPARTMENT_EDITOR" && detailTask?.ownerDepartment?.id === userInfo?.departmentId && detailTask?.approvalStatus !== "APPROVED");
   const isRevisionOnly = detailTask?.approvalStatus === "NEEDS_REVISION";
+  const isIncompleteTask = detailTask?.status === "INCOMPLETE";
   const isCompletionOnly = isDepartmentEditor || isRevisionOnly;
   const canDeleteDetail = canEditDetail && (!detailTask?.isFinalized || userInfo?.role === "ADMIN");
   const originalEditFormData = detailTask ? getEditFormData(detailTask) : {};
@@ -1598,14 +1592,16 @@ export default function TasksPage() {
                           <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{detailTask.completionEvidence || "—"}</p>
                         )}
                       </div>
-                      <div className="col-span-2">
-                        <label className="text-xs text-muted-foreground">Lý do chưa hoàn thành</label>
-                        {editingDetail ? (
-                          <textarea value={editFormData.incompleteReason} onChange={(e) => setEditFormData({ ...editFormData, incompleteReason: e.target.value })} disabled={isCompletionOnly} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
-                        ) : (
-                          <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{detailTask.incompleteReason || "—"}</p>
-                        )}
-                      </div>
+                      {isIncompleteTask && (
+                        <div className="col-span-2">
+                          <label className="text-xs text-muted-foreground">Lý do chưa hoàn thành</label>
+                          {editingDetail ? (
+                            <textarea value={editFormData.incompleteReason} onChange={(e) => setEditFormData({ ...editFormData, incompleteReason: e.target.value })} disabled={isCompletionOnly} rows={2} className="min-h-[64px] w-full rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors mt-1 resize-y" />
+                          ) : (
+                            <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">{detailTask.incompleteReason || "—"}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1643,73 +1639,12 @@ export default function TasksPage() {
                                   {feedbacks.length} phản hồi
                                 </span>
                               </div>
-                              <div className="mt-4 max-h-[360px] space-y-5 overflow-y-auto pr-1">
-                                {[
-                                  { type: "DIRECTIVE" as const, decision: undefined, title: "Ý kiến chỉ đạo" },
-                                  { type: "REVIEW" as const, decision: "NEEDS_REVISION" as const, title: "Yêu cầu bổ sung" },
-                                  { type: "REVIEW" as const, decision: "APPROVED" as const, title: "Đã duyệt hoàn thành" },
-                                ].map((group) => {
-                                  const groupItems = feedbacks
-                                    .filter((feedback) => feedback.type === group.type && (!group.decision || feedback.decision === group.decision))
-                                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                                  if (groupItems.length === 0) return null;
-                                  const isDirectiveGroup = group.type === "DIRECTIVE";
-                                  const isApprovedGroup = group.decision === "APPROVED";
-                                  const groupTitleTone = isDirectiveGroup ? "text-foreground" : isApprovedGroup ? "text-emerald-700" : "text-red-700";
-                                  return (
-                                    <div key={`${group.type}-${group.decision || "all"}`}>
-                                      <div className="mb-2 flex items-center justify-between gap-3">
-                                        <p className={`flex items-center gap-2 text-xs font-semibold ${groupTitleTone}`}>
-                                          <span className={`h-2 w-2 rounded-full ${isDirectiveGroup ? "bg-blue-500" : isApprovedGroup ? "bg-emerald-500" : "bg-red-500"}`} />
-                                          {group.title}
-                                        </p>
-                                      </div>
-                                      <div className="relative space-y-2 pl-4">
-                                        <span className="absolute bottom-3 left-[3px] top-3 w-px bg-border" />
-                                        {groupItems.map((feedback) => {
-                                          const isApproved = feedback.decision === "APPROVED";
-                                          const tone = isDirectiveGroup
-                                            ? "border-blue-200/80 bg-blue-50/40"
-                                            : isApproved
-                                              ? "border-emerald-200/80 bg-emerald-50/40"
-                                              : "border-red-200/80 bg-red-50/40";
-                                          const dot = isDirectiveGroup ? "bg-blue-500" : isApproved ? "bg-emerald-500" : "bg-red-500";
-                                          return (
-                                            <div key={feedback.id} className="relative pl-4">
-                                              <span className={`absolute left-[-1px] top-3 h-2 w-2 rounded-full ${dot} ring-4 ring-card`} />
-                                              <div className={`rounded-xl border px-3.5 py-3 ${tone}`}>
-                                                <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                                                  <span className="text-sm font-medium text-foreground">{feedback.author.fullName}</span>
-                                                  <span className="flex items-center gap-2">
-                                                    <span className="flex flex-col items-end text-[11px] leading-tight text-muted-foreground">
-                                                      <span className="font-semibold text-foreground">{formatFeedbackTime(feedback.createdAt)}</span>
-                                                      <span className="mt-0.5">{formatFeedbackDate(feedback.createdAt)}</span>
-                                                    </span>
-                                                    {isDirectiveGroup && feedback.author.id === userInfo?.id && !detailTask.isFinalized && (
-                                                      <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="icon-xs"
-                                                        className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                                                        aria-label="Xóa ý kiến chỉ đạo"
-                                                        title="Xóa ý kiến chỉ đạo"
-                                                        onClick={() => setConfirmDeleteFeedbackId(feedback.id)}
-                                                      >
-                                                        <Trash2 />
-                                                      </Button>
-                                                    )}
-                                                  </span>
-                                                </div>
-                                                {feedback.content && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{feedback.content}</p>}
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                              <FeedbackTimeline
+                                feedbacks={feedbacks}
+                                currentUserId={userInfo?.id}
+                                canDelete={(feedback) => feedback.type === "DIRECTIVE" && !detailTask.isFinalized}
+                                onDelete={(feedback) => setConfirmDeleteFeedbackId(feedback.id)}
+                              />
                             </div>
                           )}
                         </div>

@@ -14,7 +14,6 @@ import {
   MessageSquare,
   Search,
   Send,
-  Trash2,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -22,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { FeedbackTimeline } from "@/components/tasks/feedback-timeline";
 
 interface Department {
   id: string;
@@ -88,14 +88,6 @@ function formatDateTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function formatFeedbackTime(value: string) {
-  return new Date(value).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatFeedbackDate(value: string) {
-  return new Date(value).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 function getPriorityLabel(priority: ApprovalTask["priority"]) {
@@ -426,72 +418,12 @@ export default function ApprovalsPage() {
                         {selectedTask.feedbacks.length} phản hồi
                       </span>
                     </div>
-                    <div className="mt-4 max-h-[360px] space-y-5 overflow-y-auto pr-1">
-                      {(["DIRECTIVE", "REVIEW"] as const).map((groupType) => {
-                        const groupItems = selectedTask.feedbacks!
-                          .filter((feedback) => feedback.type === groupType)
-                          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-                        if (groupItems.length === 0) return null;
-                        const isDirectiveGroup = groupType === "DIRECTIVE";
-                        const hasRevision = groupItems.some((feedback) => feedback.decision === "NEEDS_REVISION");
-                        const groupTitle = isDirectiveGroup ? "Ý kiến chỉ đạo" : hasRevision ? "Yêu cầu bổ sung" : "Đã duyệt hoàn thành";
-                        const groupTitleTone = isDirectiveGroup ? "text-foreground" : hasRevision ? "text-red-700" : "text-emerald-700";
-                        return (
-                          <div key={groupType}>
-                            <div className="mb-2 flex items-center justify-between gap-3">
-                              <p className={`flex items-center gap-2 text-xs font-semibold ${groupTitleTone}`}>
-                                <span className={`h-2 w-2 rounded-full ${isDirectiveGroup ? "bg-blue-500" : hasRevision ? "bg-red-500" : "bg-emerald-500"}`} />
-                                {groupTitle}
-                              </p>
-                            </div>
-                            <div className="relative space-y-2 pl-4">
-                              <span className="absolute bottom-3 left-[3px] top-3 w-px bg-border" />
-                              {groupItems.map((feedback) => {
-                                const isApproved = feedback.decision === "APPROVED";
-                                const title = isDirectiveGroup || !isApproved ? null : "Đã duyệt hoàn thành";
-                                const tone = isDirectiveGroup
-                                  ? "border-blue-200/80 bg-blue-50/40"
-                                  : isApproved
-                                    ? "border-emerald-200/80 bg-emerald-50/40"
-                                    : "border-red-200/80 bg-red-50/40";
-                                const dot = isDirectiveGroup ? "bg-blue-500" : isApproved ? "bg-emerald-500" : "bg-red-500";
-                                return (
-                                  <div key={feedback.id} className="relative pl-4">
-                                    <span className={`absolute left-[-1px] top-3 h-2 w-2 rounded-full ${dot} ring-4 ring-card`} />
-                                    <div className={`rounded-xl border px-3.5 py-3 ${tone}`}>
-                                      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-                                        <span className="text-sm font-medium text-foreground">{feedback.author.fullName}</span>
-                                        <span className="flex items-center gap-2">
-                                                    <span className="flex flex-col items-end text-[11px] leading-tight text-muted-foreground">
-                                                      <span className="font-semibold text-foreground">{formatFeedbackTime(feedback.createdAt)}</span>
-                                                      <span className="mt-0.5">{formatFeedbackDate(feedback.createdAt)}</span>
-                                                    </span>
-                                          {isDirectiveGroup && feedback.author.id === currentUserId && (
-                                            <Button
-                                              type="button"
-                                              variant="ghost"
-                                              size="icon-xs"
-                                              className="text-muted-foreground hover:bg-red-50 hover:text-red-600"
-                                              aria-label="Xóa ý kiến chỉ đạo"
-                                              title="Xóa ý kiến chỉ đạo"
-                                              onClick={() => setFeedbackToDelete(feedback)}
-                                            >
-                                              <Trash2 />
-                                            </Button>
-                                          )}
-                                        </span>
-                                      </div>
-                                      {title && <p className={`mt-1 text-xs font-semibold ${isApproved ? "text-emerald-700" : "text-red-700"}`}>{title}</p>}
-                                      {feedback.content && <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{feedback.content}</p>}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <FeedbackTimeline
+                      feedbacks={selectedTask.feedbacks}
+                      currentUserId={currentUserId}
+                      canDelete={(feedback) => feedback.type === "DIRECTIVE"}
+                      onDelete={setFeedbackToDelete}
+                    />
                   </div>
                 )}
 
