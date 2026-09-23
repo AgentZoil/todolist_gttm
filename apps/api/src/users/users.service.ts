@@ -16,7 +16,7 @@ export class UsersService {
     });
     return users.map((user) => ({
       ...user,
-      department: user.role.name === 'DEPARTMENT_EDITOR' ? user.department : null,
+      department: user.department,
     }));
   }
 
@@ -40,7 +40,9 @@ export class UsersService {
         authUserId: supabaseUser.id,
         fullName: data.fullName,
         roleId: data.roleId,
-        departmentId: role.name === 'DEPARTMENT_EDITOR' ? data.departmentId || null : null,
+        departmentId: role.name === 'DEPARTMENT_EDITOR' && data.departmentId
+          ? data.departmentId
+          : null,
       },
       include: { role: true, department: true },
     });

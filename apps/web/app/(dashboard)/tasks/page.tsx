@@ -82,13 +82,37 @@ interface Pagination {
   totalPages: number;
 }
 
+interface TaskQueryFilters {
+  deptId?: string;
+  search?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  assignedBy?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+
+function getFilterSignature(filters: TaskQueryFilters) {
+  return JSON.stringify({
+    deptId: filters.deptId || "",
+    search: filters.search || "",
+    status: filters.status || "",
+    dateFrom: filters.dateFrom || "",
+    dateTo: filters.dateTo || "",
+    assignedBy: filters.assignedBy || "",
+    sortBy: filters.sortBy || "",
+    sortOrder: filters.sortBy ? filters.sortOrder || "asc" : "",
+  });
+}
+
 interface UserInfo {
   id: string;
   email: string;
   fullName: string;
   role: string;
-  departmentId: string;
-  departmentName: string;
+  departmentId: string | null;
+  departmentName?: string;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -365,6 +389,7 @@ export default function TasksPage() {
   const [sortBy, setSortBy] = useState("");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [searchQuery, setSearchQuery] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState<TaskQueryFilters>({});
   const [validationMsg, setValidationMsg] = useState<string | null>(null);
   const [deleteMsg, setDeleteMsg] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -389,9 +414,8 @@ export default function TasksPage() {
 
   const canChooseDepartment = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY";
   const isDepartmentEditor = userInfo?.role === "DEPARTMENT_EDITOR";
-  const isOwnDepartmentSelected = !isDepartmentEditor || filterDepartment === userInfo?.departmentId;
   const canCreateTasks = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY" ||
-    (isDepartmentEditor && isOwnDepartmentSelected);
+    (isDepartmentEditor && Boolean(userInfo?.departmentId));
   const canEditDetail = userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY" ||
     (userInfo?.role === "DEPARTMENT_EDITOR" && detailTask?.ownerDepartment?.id === userInfo?.departmentId && detailTask?.approvalStatus !== "APPROVED");
   const isRevisionOnly = detailTask?.approvalStatus === "NEEDS_REVISION";
@@ -407,18 +431,7 @@ export default function TasksPage() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const fetchTasks = (params: {
-    deptId?: string;
-    page?: number;
-    search?: string;
-    status?: string;
-    dateFrom?: string;
-    dateTo?: string;
-    assignedBy?: string;
-    sortBy?: string;
-    sortOrder?: string;
-    isFilter?: boolean;
-  } = {}) => {
+  const fetchTasks = (params: TaskQueryFilters & { page?: number; isFilter?: boolean } = {}) => {
     const { deptId, page = 1, search, status, dateFrom, dateTo, assignedBy, sortBy: sb, sortOrder: so, isFilter } = params;
     if (isFilter) setFiltering(true);
     const queryParams = new URLSearchParams();
@@ -439,6 +452,32 @@ export default function TasksPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setFiltering(false));
+  };
+
+  const getDraftFilters = (): TaskQueryFilters => ({
+    deptId: filterDepartment || undefined,
+    search: searchQuery || undefined,
+    status: filterStatus || undefined,
+    dateFrom: filterDateFrom || undefined,
+    dateTo: filterDateTo || undefined,
+    assignedBy: filterAssignedBy || undefined,
+    sortBy: sortBy || undefined,
+    sortOrder: sortBy ? sortOrder : undefined,
+  });
+
+  const draftFilters = getDraftFilters();
+  const hasFilterChanges = getFilterSignature(draftFilters) !== getFilterSignature(appliedFilters);
+  const hasDraftFilters = Object.values(draftFilters).some(Boolean);
+  const hasAppliedFilters = Object.values(appliedFilters).some(Boolean);
+
+  const applyFilters = () => {
+    const nextFilters = getDraftFilters();
+    setAppliedFilters(nextFilters);
+    return fetchTasks({ ...nextFilters, page: 1, isFilter: true });
+  };
+
+  const reloadTasks = (page = pagination.page) => {
+    return fetchTasks({ ...appliedFilters, page, isFilter: true });
   };
 
   useEffect(() => {
@@ -462,24 +501,27 @@ export default function TasksPage() {
       })
       .then(([user, depts]) => {
         if (depts && depts.length > 0) {
-          const sortedDepts = [...depts].sort((a, b) => a.id.localeCompare(b.id));
-          const defaultDept = urlDeptId || user.departmentId || sortedDepts[0].id;
+          const defaultDept = user.role === "DEPARTMENT_EDITOR"
+            ? user.departmentId || ""
+            : urlDeptId;
           setFilterStatus(urlStatus);
           setFilterDateFrom(urlDateFrom);
           setFilterDateTo(urlDateTo);
           setTempDateFrom(urlDateFrom);
           setTempDateTo(urlDateTo);
           setFilterDepartment(defaultDept);
+          const initialFilters: TaskQueryFilters = {
+            deptId: defaultDept || undefined,
+            status: urlStatus || undefined,
+            dateFrom: urlDateFrom || undefined,
+            dateTo: urlDateTo || undefined,
+          };
+          setAppliedFilters(initialFilters);
           const createDepartment = user.role === "DEPARTMENT_EDITOR" && user.departmentId
             ? user.departmentId
             : defaultDept;
           setFormData((prev) => ({ ...prev, ownerDepartmentId: createDepartment }));
-          return fetchTasks({
-            deptId: defaultDept,
-            status: urlStatus || undefined,
-            dateFrom: urlDateFrom || undefined,
-            dateTo: urlDateTo || undefined,
-          }).then(async () => {
+          return fetchTasks(initialFilters).then(async () => {
             if (!urlTaskId) return;
             setLoadingDetail(true);
             try {
@@ -500,17 +542,15 @@ export default function TasksPage() {
 
   const handleFilterChange = (deptId: string) => {
     setFilterDepartment(deptId);
-    fetchTasks({ deptId, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
   };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+    void applyFilters();
   };
 
   const handleStatusFilter = (status: string) => {
     setFilterStatus(status);
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
   };
 
   const handleDateFromFilter = (dateFrom: string) => {
@@ -524,7 +564,6 @@ export default function TasksPage() {
   const applyDateFilter = () => {
     setFilterDateFrom(tempDateFrom);
     setFilterDateTo(tempDateTo);
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: tempDateFrom, dateTo: tempDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
     setShowDatePopover(false);
   };
 
@@ -533,23 +572,21 @@ export default function TasksPage() {
     setTempDateTo("");
     setFilterDateFrom("");
     setFilterDateTo("");
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: "", dateTo: "", assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+    setShowDatePopover(false);
   };
 
   const handleAssignedByFilter = (assignedBy: string) => {
     setFilterAssignedBy(assignedBy);
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy, sortBy, sortOrder, isFilter: true });
   };
 
   const handleSort = (field: string) => {
     const newOrder = sortBy === field && sortOrder === "asc" ? "desc" : "asc";
     setSortBy(field);
     setSortOrder(newOrder);
-    fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy: field, sortOrder: newOrder, isFilter: true });
   };
 
   const handlePageChange = (newPage: number) => {
-    fetchTasks({ deptId: filterDepartment, page: newPage, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder, isFilter: true });
+    void reloadTasks(newPage);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -563,7 +600,7 @@ export default function TasksPage() {
       }
     }
     setSubmitting(true);
-    const deptId = formData.ownerDepartmentId || filterDepartment || departments[0]?.id || "";
+    const deptId = formData.ownerDepartmentId || appliedFilters.deptId || departments[0]?.id || "";
     const payload = {
       ...formData,
       ownerDepartmentId: deptId,
@@ -589,7 +626,7 @@ export default function TasksPage() {
         ownerDepartmentId: "",
         requiredCompletionDate: "",
       });
-      await fetchTasks({ deptId: filterDepartment, page: 1 });
+      await reloadTasks(1);
     } catch (err: any) {
       const msg = err?.message || "Không rõ lỗi";
       setValidationMsg("Lỗi tạo nhiệm vụ: " + msg);
@@ -602,7 +639,7 @@ export default function TasksPage() {
   const handleFinalize = async (taskId: string) => {
     try {
       await apiFetch(`/tasks/${taskId}/finalize`, { method: "PATCH" });
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
+      await reloadTasks();
       if (detailTask?.id === taskId) {
         setDetailTask({ ...detailTask, isFinalized: true });
       }
@@ -615,7 +652,7 @@ export default function TasksPage() {
   const handleUnfinalize = async (taskId: string) => {
     try {
       await apiFetch(`/tasks/${taskId}/unfinalize`, { method: "PATCH" });
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
+      await reloadTasks();
       if (detailTask?.id === taskId) {
         setDetailTask({ ...detailTask, isFinalized: false });
       }
@@ -632,7 +669,7 @@ export default function TasksPage() {
       setDetailTask(null);
       setDeleteMsg("Xóa nhiệm vụ thành công");
       setTimeout(() => setDeleteMsg(null), 8000);
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
+      await reloadTasks();
     } catch (err: any) {
       setDeleteMsg(err.message || "Xóa nhiệm vụ thất bại");
       setTimeout(() => setDeleteMsg(null), 8000);
@@ -741,7 +778,7 @@ export default function TasksPage() {
       setEditingDetail(false);
       window.dispatchEvent(new Event("inbox:refresh"));
       if (closeAfterSave) setSelectedTask(null);
-      await fetchTasks({ deptId: filterDepartment, page: pagination.page, search: searchQuery, status: filterStatus, dateFrom: filterDateFrom, dateTo: filterDateTo, assignedBy: filterAssignedBy, sortBy, sortOrder });
+      await reloadTasks();
       return true;
     } catch (err: any) {
       setValidationMsg("Lỗi lưu: " + err.message);
@@ -931,34 +968,18 @@ export default function TasksPage() {
               : "Quản lý nhiệm vụ theo phòng ban/đơn vị"}
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
-          <form onSubmit={handleSearch} className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="flex w-full flex-wrap items-center gap-2.5 sm:w-auto">
+          <form onSubmit={handleSearch} className="relative min-w-[180px] flex-1 sm:w-[280px] sm:flex-none">
+            <label className="sr-only">Từ khóa</label>
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Tìm nhiệm vụ..."
+              placeholder="Tìm tiêu đề, mã nhiệm vụ..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 rounded-lg border border-border bg-card pl-9 pr-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors w-48 sm:w-64"
+              className="h-9 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
             />
           </form>
-          <div className="relative">
-            <select
-              value={filterDepartment}
-              onChange={(e) => handleFilterChange(e.target.value)}
-              disabled={filtering}
-              className="h-9 rounded-lg border-2 border-primary/40 bg-accent/50 px-3 pr-8 text-sm font-medium text-primary shadow-sm ring-1 ring-primary/10 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50"
-            >
-              {[...departments].sort((a, b) => a.id.localeCompare(b.id)).map((dept, i) => (
-                <option key={dept.id} value={dept.id}>{i + 1}. {dept.name}</option>
-              ))}
-            </select>
-            {filtering && (
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              </div>
-            )}
-          </div>
           {canCreateTasks && (
             <Button size="sm" onClick={() => setShowForm(true)}>
               <Plus className="h-4 w-4" />
@@ -969,118 +990,162 @@ export default function TasksPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5">
-        <select
-          value={filterStatus}
-          onChange={(e) => handleStatusFilter(e.target.value)}
-          className="h-9 rounded-lg border border-border bg-card px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
-        >
-          <option value="">Tất cả trạng thái</option>
-          <option value="IN_PROGRESS">Đang thực hiện</option>
-          <option value="INCOMPLETE">Không hoàn thành</option>
-          <option value="COMPLETED_EARLY">Hoàn thành trước hạn</option>
-          <option value="COMPLETED_ON_TIME">Hoàn thành đúng hạn</option>
-          <option value="COMPLETED_LATE">Hoàn thành quá hạn</option>
-          <option value="NO_EVALUATION">Không đánh giá</option>
-          <option value="CANCELLED">Đã hủy</option>
-        </select>
-        <select
-          value={filterAssignedBy}
-          onChange={(e) => handleAssignedByFilter(e.target.value)}
-          className="h-9 rounded-lg border border-border bg-card px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
-        >
-          <option value="">Tất cả lãnh đạo</option>
-          <option value="Cục trưởng Bùi Quang Thái">Cục trưởng Bùi Quang Thái</option>
-          <option value="PCT Nguyễn Mạnh Thắng">PCT Nguyễn Mạnh Thắng</option>
-          <option value="PCT Nguyễn Viết Huy">PCT Nguyễn Viết Huy</option>
-          <option value="PCT Nguyễn Thanh Hoài">PCT Nguyễn Thanh Hoài</option>
-          <option value="PCT Nguyễn Thành Vinh">PCT Nguyễn Thành Vinh</option>
-          <option value="PCT Phan Thị Thu Hiền">PCT Phan Thị Thu Hiền</option>
-          <option value="PCT Ngô Lâm">PCT Ngô Lâm</option>
-          <option value="PBT Trần Hưng Hà">PBT Trần Hưng Hà</option>
-        </select>
-        <div className="relative">
-          <button
-            onClick={() => {
-              setTempDateFrom(filterDateFrom);
-              setTempDateTo(filterDateTo);
-              setShowDatePopover(!showDatePopover);
-            }}
-            className={cn(
-              "h-9 rounded-lg border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors flex items-center gap-2",
-              filterDateFrom || filterDateTo
-                ? "border-primary/40 text-primary font-medium"
-                : "border-border text-muted-foreground"
-            )}
-          >
-            <Calendar className="h-4 w-4" />
-            {filterDateFrom || filterDateTo ? (
-              <span>
-                {filterDateFrom ? formatDateShort(filterDateFrom) : "..."} - {filterDateTo ? formatDateShort(filterDateTo) : "..."}
-              </span>
-            ) : (
-              <span>Khoảng ngày</span>
-            )}
-          </button>
-          {showDatePopover && (
-            <>
-              <div className="fixed inset-0 z-40 cursor-pointer" onClick={() => setShowDatePopover(false)} />
-              <div className="absolute top-full left-0 mt-1 z-50 bg-card rounded-xl border border-border shadow-lg p-3 min-w-[260px]">
-                <div className="flex flex-col gap-2.5">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Từ ngày</label>
-                    <input
-                      type="date"
-                      value={tempDateFrom}
-                      onChange={(e) => handleDateFromFilter(e.target.value)}
-                      className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground mb-1 block">Đến ngày</label>
-                    <input
-                      type="date"
-                      value={tempDateTo}
-                      min={tempDateFrom || undefined}
-                      onChange={(e) => handleDateToFilter(e.target.value)}
-                      className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <button
-                      onClick={applyDateFilter}
-                      className="flex-1 h-8 rounded-lg bg-primary text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
-                    >
-                      Áp dụng
-                    </button>
-                    {(tempDateFrom || tempDateTo) && (
+        <label className="block w-full sm:w-[230px]">
+            <span className="sr-only">Đơn vị thực hiện</span>
+            <select
+              value={filterDepartment}
+              onChange={(e) => handleFilterChange(e.target.value)}
+              disabled={filtering}
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            >
+              <option value="">Tất cả phòng ban/đơn vị</option>
+              {[...departments].sort((a, b) => a.id.localeCompare(b.id)).map((dept, i) => (
+                <option key={dept.id} value={dept.id}>{i + 1}. {dept.name}</option>
+              ))}
+            </select>
+        </label>
+
+        <label className="block w-full sm:w-[170px]">
+            <span className="sr-only">Trạng thái</span>
+            <select
+              value={filterStatus}
+              onChange={(e) => handleStatusFilter(e.target.value)}
+              disabled={filtering}
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            >
+              <option value="">Tất cả trạng thái</option>
+              <option value="IN_PROGRESS">Đang thực hiện</option>
+              <option value="INCOMPLETE">Không hoàn thành</option>
+              <option value="COMPLETED_EARLY">Hoàn thành trước hạn</option>
+              <option value="COMPLETED_ON_TIME">Hoàn thành đúng hạn</option>
+              <option value="COMPLETED_LATE">Hoàn thành quá hạn</option>
+              <option value="NO_EVALUATION">Không đánh giá</option>
+              <option value="CANCELLED">Đã hủy</option>
+            </select>
+        </label>
+
+        <label className="block w-full sm:w-[205px]">
+            <span className="sr-only">Lãnh đạo giao nhiệm vụ</span>
+            <select
+              value={filterAssignedBy}
+              onChange={(e) => handleAssignedByFilter(e.target.value)}
+              disabled={filtering}
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            >
+              <option value="">Tất cả lãnh đạo</option>
+              <option value="Cục trưởng Bùi Quang Thái">Cục trưởng Bùi Quang Thái</option>
+              <option value="PCT Nguyễn Mạnh Thắng">PCT Nguyễn Mạnh Thắng</option>
+              <option value="PCT Nguyễn Viết Huy">PCT Nguyễn Viết Huy</option>
+              <option value="PCT Nguyễn Thanh Hoài">PCT Nguyễn Thanh Hoài</option>
+              <option value="PCT Nguyễn Thành Vinh">PCT Nguyễn Thành Vinh</option>
+              <option value="PCT Phan Thị Thu Hiền">PCT Phan Thị Thu Hiền</option>
+              <option value="PCT Ngô Lâm">PCT Ngô Lâm</option>
+              <option value="PBT Trần Hưng Hà">PBT Trần Hưng Hà</option>
+            </select>
+        </label>
+
+        <div className="relative w-full sm:w-[175px]">
+            <span className="sr-only">Khoảng ngày</span>
+            <button
+              type="button"
+              onClick={() => {
+                setTempDateFrom(filterDateFrom);
+                setTempDateTo(filterDateTo);
+                setShowDatePopover(!showDatePopover);
+              }}
+              className={cn(
+                "flex h-9 w-full items-center gap-2 rounded-lg border bg-background px-3 text-left text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
+                filterDateFrom || filterDateTo
+                  ? "border-primary/40 font-medium text-primary"
+                  : "border-border text-muted-foreground",
+              )}
+            >
+              <Calendar className="h-4 w-4 shrink-0" />
+              {filterDateFrom || filterDateTo ? (
+                <span className="truncate">
+                  {filterDateFrom ? formatDateShort(filterDateFrom) : "..."} - {filterDateTo ? formatDateShort(filterDateTo) : "..."}
+                </span>
+              ) : (
+                <span>Chọn khoảng ngày</span>
+              )}
+            </button>
+            {showDatePopover && (
+              <>
+                <div className="fixed inset-0 z-40 cursor-pointer" onClick={() => setShowDatePopover(false)} />
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-[260px] rounded-xl border border-border bg-card p-3 shadow-lg">
+                  <div className="flex flex-col gap-2.5">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Từ ngày</label>
+                      <input
+                        type="date"
+                        value={tempDateFrom}
+                        onChange={(e) => handleDateFromFilter(e.target.value)}
+                        className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-muted-foreground">Đến ngày</label>
+                      <input
+                        type="date"
+                        value={tempDateTo}
+                        min={tempDateFrom || undefined}
+                        onChange={(e) => handleDateToFilter(e.target.value)}
+                        className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pt-0.5">
                       <button
-                        onClick={clearDateFilter}
-                        className="h-8 px-3 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        type="button"
+                        onClick={applyDateFilter}
+                        className="h-8 flex-1 rounded-lg bg-primary text-xs font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
                       >
-                        Xóa
+                        Xong
                       </button>
-                    )}
+                      {(tempDateFrom || tempDateTo) && (
+                        <button
+                          type="button"
+                          onClick={clearDateFilter}
+                          className="h-8 rounded-lg border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          Xóa
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </>
-          )}
-        </div>
-        {(filterStatus || filterDateFrom || filterDateTo || filterAssignedBy) && (
+              </>
+            )}
+          </div>
+        {(hasDraftFilters || hasAppliedFilters) && (
           <button
+            type="button"
             onClick={() => {
+              setFilterDepartment("");
               setFilterStatus("");
               setTempDateFrom("");
               setTempDateTo("");
               setFilterDateFrom("");
               setFilterDateTo("");
               setFilterAssignedBy("");
-              fetchTasks({ deptId: filterDepartment, page: 1, search: searchQuery, isFilter: true });
+              setSearchQuery("");
+              setSortBy("");
+              setSortOrder("asc");
+              setShowDatePopover(false);
             }}
-            className="h-9 px-3 rounded-lg border border-border bg-card text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="h-9 rounded-lg px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            Xóa bộ lọc
+            Xóa
           </button>
+        )}
+        {hasFilterChanges && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void applyFilters()}
+            disabled={filtering}
+          >
+            {filtering ? <Loader2 className="h-4 w-4 animate-spin" /> : "Áp dụng"}
+          </Button>
         )}
       </div>
 

@@ -39,6 +39,11 @@ const COMPLETION_FIELDS = ['actualCompletionDate', 'completionEvidence'];
 const REVISION_EDITABLE_FIELDS = new Set(COMPLETION_FIELDS);
 const DEPARTMENT_EDITOR_EDITABLE_FIELDS = new Set(COMPLETION_FIELDS);
 
+type TaskAccessUser = {
+  role: string;
+  departmentId: string | null;
+};
+
 @Injectable()
 export class TasksService {
   constructor(
@@ -145,6 +150,7 @@ export class TasksService {
     if (assignedBy) {
       where.assignedBy = assignedBy;
     }
+
     if (andConditions.length > 0) where.AND = andConditions;
 
     const [tasks, total] = await Promise.all([
@@ -370,7 +376,7 @@ export class TasksService {
     return { success: true, marked: unreadDirectives.length };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, currentUser?: TaskAccessUser) {
     const task = await this.prisma.task.findUnique({
       where: { id },
       select: {
@@ -431,6 +437,16 @@ export class TasksService {
         },
       },
     });
+    if (
+      task &&
+      currentUser &&
+      (currentUser.role === 'VIEWER' ||
+        (currentUser.role === 'DEPARTMENT_EDITOR' &&
+          currentUser.departmentId !== task.ownerDepartmentId))
+    ) {
+      return this.enrichTask({ ...task, feedbacks: [] });
+    }
+
     return task ? this.enrichTask(task) : null;
   }
 
@@ -547,10 +563,15 @@ export class TasksService {
       expectedVersion?: number;
       updatedBy: string;
       userRole: string;
+      userDepartmentId?: string | null;
     },
   ) {
     const oldTask = await this.prisma.task.findUnique({ where: { id } });
     if (!oldTask) throw new NotFoundException('Task not found');
+
+    if (!['ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR'].includes(data.userRole)) {
+      throw new ForbiddenException('Bạn không có quyền sửa nhiệm vụ');
+    }
 
     const hasActualDateInput = Object.prototype.hasOwnProperty.call(
       data,
@@ -571,7 +592,7 @@ export class TasksService {
     if (oldTask.approvalStatus === 'NEEDS_REVISION') {
       const changedFields = Object.keys(data).filter(
         (field) =>
-          !['updatedBy', 'userRole', 'expectedVersion'].includes(field) &&
+          !['updatedBy', 'userRole', 'userDepartmentId', 'expectedVersion'].includes(field) &&
           !REVISION_EDITABLE_FIELDS.has(field),
       );
       if (changedFields.length > 0) {
@@ -582,9 +603,12 @@ export class TasksService {
     }
 
     if (data.userRole === 'DEPARTMENT_EDITOR') {
+      if (!data.userDepartmentId || oldTask.ownerDepartmentId !== data.userDepartmentId) {
+        throw new ForbiddenException('Bạn không có quyền sửa nhiệm vụ của phòng ban khác');
+      }
       const changedFields = Object.keys(data).filter(
         (field) =>
-          !['updatedBy', 'userRole', 'expectedVersion'].includes(field) &&
+          !['updatedBy', 'userRole', 'userDepartmentId', 'expectedVersion'].includes(field) &&
           !DEPARTMENT_EDITOR_EDITABLE_FIELDS.has(field),
       );
       if (changedFields.length > 0) {
@@ -651,7 +675,7 @@ export class TasksService {
       );
     }
 
-    const { userRole, expectedVersion, ...updateData } = data;
+    const { userRole, userDepartmentId, expectedVersion, ...updateData } = data;
 
     const prismaData: Record<string, any> = {
       version: { increment: 1 },
@@ -954,6 +978,10 @@ export class TasksService {
   }
 
   async finalize(id: string, finalizedBy: string, userRole: string) {
+    if (!['ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR'].includes(userRole)) {
+      throw new ForbiddenException('Bạn không có quyền chốt nhiệm vụ');
+    }
+
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Task not found');
 
@@ -1032,6 +1060,10 @@ export class TasksService {
   }
 
   async remove(id: string, deletedBy: string, userRole: string) {
+    if (!['ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR'].includes(userRole)) {
+      throw new ForbiddenException('Bạn không có quyền xóa nhiệm vụ');
+    }
+
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Task not found');
 

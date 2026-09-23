@@ -53,7 +53,7 @@ export class CurrentUserMiddleware implements NestMiddleware {
       email: authUser.email,
       fullName: user.fullName,
       roleId: user.roleId,
-      departmentId: user.role.name === 'DEPARTMENT_EDITOR' ? user.departmentId : null,
+      departmentId: user.departmentId,
       role: user.role.name,
       isActive: user.isActive,
     };

@@ -17,7 +17,7 @@ export class AuthController {
   @UseGuards(AuthGuard)
   async getMe(@CurrentUser() user: CurrentUserType) {
     let departmentName: string | undefined;
-    if (user.role === 'DEPARTMENT_EDITOR' && user.departmentId) {
+    if (user.departmentId) {
       const department = await this.prisma.department.findUnique({
         where: { id: user.departmentId },
         select: { name: true },
@@ -30,8 +30,8 @@ export class AuthController {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
-        departmentId: user.role === 'DEPARTMENT_EDITOR' ? user.departmentId : null,
-        departmentName: user.role === 'DEPARTMENT_EDITOR' ? departmentName : undefined,
+        departmentId: user.departmentId,
+        departmentName,
       },
     };
   }

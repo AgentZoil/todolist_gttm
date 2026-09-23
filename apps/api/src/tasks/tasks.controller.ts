@@ -90,8 +90,9 @@ export class TasksController {
   @Get(':id')
   async findOne(
     @Param('id') id: string,
+    @CurrentUser() user?: { role: string; departmentId: string | null },
   ) {
-    const task = await this.tasksService.findOne(id);
+    const task = await this.tasksService.findOne(id, user);
     return { data: task };
   }
 
@@ -120,13 +121,13 @@ export class TasksController {
   async update(
     @Param('id') id: string,
     @Body() body: UpdateTaskDto,
-    @CurrentUser() user: { id: string; role: string; departmentId: string },
+    @CurrentUser() user: { id: string; role: string; departmentId: string | null },
   ) {
-    if (!['ADMIN', 'SECRETARY'].includes(user.role)) {
-      const canEdit = await this.tasksService.findOne(id);
-      if (canEdit && canEdit.ownerDepartmentId !== user.departmentId) {
-        throw new ForbiddenException('Bạn không có quyền sửa nhiệm vụ này');
-      }
+    if (!['ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR'].includes(user.role)) {
+      throw new ForbiddenException('Bạn không có quyền sửa nhiệm vụ');
+    }
+    if (user.role === 'DEPARTMENT_EDITOR' && !user.departmentId) {
+      throw new ForbiddenException('Tài khoản phòng ban chưa được gắn đơn vị');
     }
 
     const updateBody = user.role === 'DEPARTMENT_EDITOR'
@@ -147,6 +148,7 @@ export class TasksController {
       ...updateBody,
       updatedBy: user.id,
       userRole: user.role,
+      userDepartmentId: user.departmentId,
     });
     return { data: task };
   }
@@ -159,6 +161,7 @@ export class TasksController {
   }
 
   @Patch(':id/finalize')
+  @Roles('ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR')
   async finalize(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
@@ -220,6 +223,7 @@ export class TasksController {
   }
 
   @Delete(':id')
+  @Roles('ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR')
   async remove(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },
