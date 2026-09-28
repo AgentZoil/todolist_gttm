@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -99,6 +100,12 @@ export default function LoginPage() {
               {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
           </form>
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            Chưa có tài khoản?{" "}
+            <Link href="/register" className="font-semibold text-primary hover:underline">
+              Đăng ký và chờ Admin duyệt
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>

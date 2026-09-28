@@ -26,16 +26,35 @@ export class SupabaseService implements OnModuleInit {
     return data.users.find((u) => u.email === email) || null;
   }
 
-  async getOrCreateUser(email: string, fullName: string, password: string) {
-    const existing = await this.getUserByEmail(email);
-    if (existing) return existing;
-
+  async createUser(email: string, fullName: string, password: string) {
     const { data, error } = await this.client.auth.admin.createUser({
       email,
-      email_confirm: true,
       password,
+      email_confirm: false,
       user_metadata: { full_name: fullName },
     });
+    if (error) throw error;
+    return data.user;
+  }
+
+  async resetPendingUser(authUserId: string, fullName: string, password: string) {
+    const { data, error } = await this.client.auth.admin.updateUserById(
+      authUserId,
+      {
+        password,
+        email_confirm: false,
+        user_metadata: { full_name: fullName },
+      },
+    );
+    if (error) throw error;
+    return data.user;
+  }
+
+  async activateUser(authUserId: string) {
+    const { data, error } = await this.client.auth.admin.updateUserById(
+      authUserId,
+      { email_confirm: true },
+    );
     if (error) throw error;
     return data.user;
   }

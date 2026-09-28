@@ -35,6 +35,31 @@ CREATE TABLE IF NOT EXISTS users (
 
 DO $$
 BEGIN
+  CREATE TYPE "RegistrationRequestStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS user_registration_requests (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  auth_user_id TEXT UNIQUE NOT NULL,
+  email TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  status "RegistrationRequestStatus" NOT NULL DEFAULT 'PENDING',
+  reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  rejection_reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_registration_requests_status_created_at
+  ON user_registration_requests(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_user_registration_requests_email
+  ON user_registration_requests(email);
+
+DO $$
+BEGIN
   CREATE TYPE "TaskPriority" AS ENUM ('URGENT', 'NORMAL');
 EXCEPTION
   WHEN duplicate_object THEN NULL;

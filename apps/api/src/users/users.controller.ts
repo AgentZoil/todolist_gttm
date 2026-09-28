@@ -1,8 +1,21 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  UseGuards,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { CurrentUser as CurrentUserType } from '../auth/current-user.type';
+import {
+  ApproveRegistrationDto,
+  RejectRegistrationDto,
+} from './dto/registration.dto';
 
 @Controller('users')
 @UseGuards(AuthGuard, RolesGuard)
@@ -16,19 +29,41 @@ export class UsersController {
     return { data: users };
   }
 
-  @Post()
+  @Get('registration-requests')
   @Roles('ADMIN')
-  async create(
-    @Body()
-    body: {
-      email: string;
-      fullName: string;
-      password: string;
-      roleId: string;
-      departmentId?: string;
-    },
+  async findRegistrationRequests() {
+    return { data: await this.usersService.findRegistrationRequests() };
+  }
+
+  @Patch('registration-requests/:id/approve')
+  @Roles('ADMIN')
+  async approveRegistrationRequest(
+    @Param('id') id: string,
+    @Body() body: ApproveRegistrationDto,
+    @CurrentUser() user: CurrentUserType,
   ) {
-    const user = await this.usersService.create(body);
-    return { data: user };
+    return {
+      data: await this.usersService.approveRegistrationRequest(
+        id,
+        body,
+        user.id,
+      ),
+    };
+  }
+
+  @Patch('registration-requests/:id/reject')
+  @Roles('ADMIN')
+  async rejectRegistrationRequest(
+    @Param('id') id: string,
+    @Body() body: RejectRegistrationDto,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return {
+      data: await this.usersService.rejectRegistrationRequest(
+        id,
+        body.reason,
+        user.id,
+      ),
+    };
   }
 }

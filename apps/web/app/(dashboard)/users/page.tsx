@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, UserPlus, X, AlertTriangle } from "lucide-react";
+import { Users, AlertTriangle, Check, UserRoundCheck, UserRoundX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Role {
@@ -25,6 +25,16 @@ interface User {
   isActive: boolean;
   role: Role;
   department?: Department | null;
+}
+
+interface RegistrationRequest {
+  id: string;
+  email: string;
+  fullName: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  rejectionReason?: string | null;
+  createdAt: string;
+  reviewer?: { id: string; fullName: string } | null;
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -50,15 +60,11 @@ export default function UsersPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [formData, setFormData] = useState({
-    email: "",
-    fullName: "",
-    password: "",
-    roleId: "",
-    departmentId: "",
-  });
+  const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
+  const [approvalRoles, setApprovalRoles] = useState<Record<string, string>>({});
+  const [approvalDepartments, setApprovalDepartments] = useState<Record<string, string>>({});
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<{ data: { role: string } }>("/auth/me")
@@ -72,32 +78,70 @@ export default function UsersPage() {
           apiFetch<{ data: User[] }>("/users"),
           apiFetch<{ data: Role[] }>("/auth/roles"),
           apiFetch<{ data: Department[] }>("/departments"),
+          res.data.role === "ADMIN"
+            ? apiFetch<{ data: RegistrationRequest[] }>("/users/registration-requests")
+            : Promise.resolve({ data: [] as RegistrationRequest[] }),
         ]);
       })
       .then((result) => {
         if (!result) return;
-        const [usersRes, rolesRes, deptsRes] = result;
+        const [usersRes, rolesRes, deptsRes, requestsRes] = result;
         setUsers(usersRes.data);
         setRoles(rolesRes.data);
         setDepartments(deptsRes.data);
+        setRegistrationRequests(requestsRes.data);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const refreshRegistrationRequests = async () => {
+    const res = await apiFetch<{ data: RegistrationRequest[] }>("/users/registration-requests");
+    setRegistrationRequests(res.data);
+  };
+
+  const approveRequest = async (request: RegistrationRequest) => {
+    const roleId = approvalRoles[request.id];
+    const role = roles.find((item) => item.id === roleId);
+    if (!roleId) return;
+    if (role?.name === "DEPARTMENT_EDITOR" && !approvalDepartments[request.id]) {
+      setError("Cần chọn phòng ban cho tài khoản phòng ban");
+      return;
+    }
+
+    setProcessingRequest(request.id);
     try {
-      await apiFetch("/users", {
-        method: "POST",
-        body: JSON.stringify(formData),
+      await apiFetch(`/users/registration-requests/${request.id}/approve`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          roleId,
+          departmentId: approvalDepartments[request.id] || undefined,
+        }),
       });
-      setShowForm(false);
-      setFormData({ email: "", fullName: "", password: "", roleId: "", departmentId: "" });
-      const res = await apiFetch<{ data: User[] }>("/users");
-      setUsers(res.data);
+      await Promise.all([
+        refreshRegistrationRequests(),
+        apiFetch<{ data: User[] }>("/users").then((res) => setUsers(res.data)),
+      ]);
     } catch (err: any) {
-      setError("Lỗi: " + err.message);
+      setError("Lỗi duyệt yêu cầu: " + err.message);
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const rejectRequest = async (request: RegistrationRequest) => {
+    const reason = window.prompt("Lý do từ chối (có thể bỏ trống):") ?? "";
+    setProcessingRequest(request.id);
+    try {
+      await apiFetch(`/users/registration-requests/${request.id}/reject`, {
+        method: "PATCH",
+        body: JSON.stringify({ reason }),
+      });
+      await refreshRegistrationRequests();
+    } catch (err: any) {
+      setError("Lỗi từ chối yêu cầu: " + err.message);
+    } finally {
+      setProcessingRequest(null);
     }
   };
 
@@ -125,9 +169,6 @@ export default function UsersPage() {
     );
   }
 
-  const INPUT_CLASS =
-    "h-9 w-full rounded-lg border border-border bg-card px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors";
-
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -137,140 +178,71 @@ export default function UsersPage() {
             Quản lý {users.length} người dùng
           </p>
         </div>
-        {isAdmin && (
-          <Button
-            onClick={() => setShowForm(!showForm)}
-            variant={showForm ? "outline" : "default"}
-            className="gap-1.5"
-          >
-            {showForm ? (
-              <>
-                <X className="h-4 w-4" />
-                Đóng
-              </>
-            ) : (
-              <>
-                <UserPlus className="h-4 w-4" />
-                Thêm người dùng
-              </>
-            )}
-          </Button>
-        )}
       </div>
 
-      {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 cursor-pointer bg-black/40 backdrop-blur-sm" onClick={() => setShowForm(false)} />
-          <div className="relative bg-card rounded-2xl shadow-2xl border border-border w-full max-w-lg mx-4 ring-1 ring-foreground/5">
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
-                  <UserPlus className="h-4 w-4 text-primary" />
-                </span>
-                <h2 className="text-lg font-semibold text-foreground">Thêm người dùng mới</h2>
-              </div>
-              <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="h-5 w-5" />
-              </button>
+      {isAdmin && (
+        <Card>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold">
+                <UserRoundCheck className="h-4 w-4 text-primary" />
+                Yêu cầu đăng ký chờ duyệt
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">Chỉ tài khoản được duyệt mới đăng nhập và sử dụng hệ thống.</p>
             </div>
-            <form onSubmit={handleSubmit} className="p-4 space-y-4">
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground">
-                  Họ và tên <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.fullName}
-                  onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                  className={INPUT_CLASS}
-                  placeholder="Nguyễn Văn A"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground">
-                  Email <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className={INPUT_CLASS}
-                  placeholder="nguyenvana@example.com"
-                  required
-                />
-                <p className="text-xs text-muted-foreground">Hệ thống sẽ tự tạo tài khoản đăng nhập cho người dùng này</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground">
-                  Mật khẩu <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className={INPUT_CLASS}
-                  placeholder="Tối thiểu 6 ký tự"
-                  minLength={6}
-                  required
-                />
-                <p className="text-xs text-muted-foreground">Chia sẻ mật khẩu này cho người dùng để đăng nhập lần đầu</p>
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground">
-                  Vai trò <span className="text-destructive">*</span>
-                </label>
-                <select
-                  value={formData.roleId}
-                  onChange={(e) => setFormData({ ...formData, roleId: e.target.value, departmentId: "" })}
-                  className={INPUT_CLASS}
-                  required
-                >
-                  <option value="">-- Chọn vai trò --</option>
-                  {roles.map((role) => (
-                    <option key={role.id} value={role.id}>
-                      {ROLE_LABEL[role.name] || role.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {roles.find((r) => r.id === formData.roleId)?.name === "DEPARTMENT_EDITOR" && (
-                <div className="space-y-1.5 animate-in fade-in slide-in-from-top-2 duration-200 fill-mode-both">
-                  <label className="block text-sm font-medium text-foreground">
-                    Phòng ban/Đơn vị <span className="text-destructive">*</span>
-                  </label>
-                  <select
-                    value={formData.departmentId}
-                    onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                    className={INPUT_CLASS}
-                    required
-                  >
-                    <option value="">-- Chọn phòng ban/đơn vị --</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.id}>
-                        {dept.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="flex gap-2 pt-2">
-                <Button type="submit" className="gap-1.5">
-                  <UserPlus className="h-4 w-4" />
-                  Tạo người dùng
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowForm(false)}
-                  className="gap-1.5"
-                >
-                  Hủy
-                </Button>
-              </div>
-            </form>
+            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+              {registrationRequests.filter((request) => request.status === "PENDING").length}
+            </span>
           </div>
-        </div>
+          {registrationRequests.filter((request) => request.status === "PENDING").length === 0 ? (
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">Không có yêu cầu chờ duyệt.</CardContent>
+          ) : (
+            <div className="divide-y divide-border">
+              {registrationRequests.filter((request) => request.status === "PENDING").map((request) => {
+                const selectedRoleId = approvalRoles[request.id] || "";
+                const selectedRole = roles.find((role) => role.id === selectedRoleId)?.name;
+                const busy = processingRequest === request.id;
+                return (
+                  <div key={request.id} className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground">{request.fullName}</p>
+                      <p className="text-sm text-muted-foreground">{request.email}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Gửi lúc {new Date(request.createdAt).toLocaleString("vi-VN")}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <select
+                        value={selectedRoleId}
+                        onChange={(event) => setApprovalRoles({ ...approvalRoles, [request.id]: event.target.value })}
+                        className="h-9 rounded-lg border border-border bg-card px-3 text-sm"
+                        disabled={busy}
+                      >
+                        <option value="">Chọn vai trò</option>
+                        {roles.map((role) => <option key={role.id} value={role.id}>{ROLE_LABEL[role.name] || role.name}</option>)}
+                      </select>
+                      {selectedRole === "DEPARTMENT_EDITOR" && (
+                        <select
+                          value={approvalDepartments[request.id] || ""}
+                          onChange={(event) => setApprovalDepartments({ ...approvalDepartments, [request.id]: event.target.value })}
+                          className="h-9 rounded-lg border border-border bg-card px-3 text-sm"
+                          disabled={busy}
+                        >
+                          <option value="">Chọn phòng ban</option>
+                          {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                        </select>
+                      )}
+                      <Button size="sm" onClick={() => void approveRequest(request)} disabled={busy || !selectedRoleId}>
+                        {busy ? "Đang xử lý..." : <><Check className="h-4 w-4" />Duyệt</>}
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => void rejectRequest(request)} disabled={busy}>
+                        <UserRoundX className="h-4 w-4" />Từ chối
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
       )}
 
       <Card>
