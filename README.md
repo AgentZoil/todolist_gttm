@@ -38,8 +38,8 @@ SUPABASE_SECRET_KEY=your-secret-key
 # Database (PostgreSQL connection string from Supabase)
 DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
 
-# Frontend URL (for CORS)
-FRONTEND_URL=http://localhost:3000
+# Frontend origins (comma-separated, for CORS)
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
 # Server
 PORT=3001
@@ -58,7 +58,8 @@ NEXT_PUBLIC_API_URL=http://localhost:3001/api
 ### 1. Install Dependencies
 
 ```bash
-npm install
+cd apps/api && npm ci
+cd ../web && npm ci
 ```
 
 ### 2. Setup Database
@@ -73,9 +74,11 @@ npm install
 ```bash
 cd apps/api
 npx prisma generate
+npx prisma migrate deploy
+npx prisma migrate status
 ```
 
-Then apply the SQL migration manually via psql or Supabase SQL Editor.
+DB hiện hữu đã được baseline các migration cũ. Không chạy `prisma migrate reset` trên DB thật.
 
 ### 4. Seed the Database
 
@@ -128,7 +131,7 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabas
 SUPABASE_URL=your-project-url
 SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 SUPABASE_SECRET_KEY=your-secret-key
-ALLOWED_ORIGINS=http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 NEXT_PUBLIC_API_URL=http://localhost:3001/api
@@ -188,6 +191,7 @@ docker build -t task-web -f apps/web/Dockerfile .
 - `GET /api/auth/status` - Health check
 - `GET /api/auth/me` - Get current user
 - `GET /api/auth/roles` - Get available roles
+- `POST /api/users/register` - Gửi yêu cầu tạo tài khoản, chờ Admin duyệt
 
 ### Tasks
 - `GET /api/tasks` - List tasks (with pagination, search, filters)
@@ -209,7 +213,9 @@ docker build -t task-web -f apps/web/Dockerfile .
 
 ### Users
 - `GET /api/users` - List users
-- `POST /api/users` - Create user (Admin only)
+- `GET /api/users/registration-requests` - Admin xem yêu cầu đăng ký
+- `PATCH /api/users/registration-requests/:id/approve` - Admin duyệt và cấp role/phòng ban
+- `PATCH /api/users/registration-requests/:id/reject` - Admin từ chối yêu cầu
 
 ### Dashboard
 - `GET /api/dashboard/summary` - Get summary statistics
