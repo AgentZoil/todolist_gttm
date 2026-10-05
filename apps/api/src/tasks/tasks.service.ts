@@ -5,8 +5,8 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuditLogService } from '../audit-log/audit-log.service';
 import { PeriodLockService } from '../period-lock/period-lock.service';
 import { DashboardService } from '../dashboard/dashboard.service';
 import {
@@ -14,7 +14,10 @@ import {
   getStatusLabel,
   getStatusColor,
   isPastDeadline,
-  startOfDay,
+  startOfOrganizationDay,
+  compareDateOnly,
+  organizationDateParts,
+  organizationDateStart,
 } from './status';
 
 const NHOM_A_FIELDS = [
@@ -47,10 +50,41 @@ type TaskAccessUser = {
 export class TasksService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly auditLogService: AuditLogService,
     private readonly periodLockService: PeriodLockService,
     private readonly dashboardService: DashboardService,
   ) {}
+
+  private auditValue(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === 'object') return JSON.stringify(value) ?? String(value);
+    return String(value);
+  }
+
+  private async auditDiff(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    entityId: string,
+    action: string,
+    before: object,
+    after: object,
+    fields: string[],
+  ) {
+    const changes = fields.flatMap((fieldName) => {
+      const oldValue = this.auditValue((before as Record<string, unknown>)[fieldName]);
+      const newValue = this.auditValue((after as Record<string, unknown>)[fieldName]);
+      return oldValue === newValue ? [] : [{
+        userId,
+        action,
+        entityType: 'TASK',
+        entityId,
+        fieldName,
+        oldValue,
+        newValue,
+      }];
+    });
+    if (changes.length) await tx.auditLog.createMany({ data: changes });
+  }
 
   private enrichTask(task: any) {
     const status = calculateTaskStatus({
@@ -147,7 +181,7 @@ export class TasksService {
     }
     if (status) {
       if (status === 'IN_PROGRESS' || status === 'INCOMPLETE') {
-        const today = startOfDay(new Date());
+        const today = startOfOrganizationDay(new Date());
         where.isCancelled = false;
         where.actualCompletionDate = null;
         where.requiredCompletionDate = status === 'IN_PROGRESS'
@@ -229,11 +263,13 @@ export class TasksService {
       });
       const filteredTasks = allMatchingTasks.filter((task) => {
         if (!task.actualCompletionDate || !task.requiredCompletionDate) return false;
-        const actual = new Date(task.actualCompletionDate).getTime();
-        const required = new Date(task.requiredCompletionDate).getTime();
-        if (status === 'COMPLETED_EARLY') return actual < required;
-        if (status === 'COMPLETED_ON_TIME') return actual === required;
-        return actual > required;
+        const comparison = compareDateOnly(
+          new Date(task.actualCompletionDate),
+          new Date(task.requiredCompletionDate),
+        );
+        if (status === 'COMPLETED_EARLY') return comparison < 0;
+        if (status === 'COMPLETED_ON_TIME') return comparison === 0;
+        return comparison > 0;
       });
       total = filteredTasks.length;
       tasks = filteredTasks.slice((safePage - 1) * safeLimit, safePage * safeLimit);
@@ -266,25 +302,24 @@ export class TasksService {
   }
 
   private parseFilterDate(value: string, endOfDay: boolean): Date {
-    const [year, month, day] = value.split('-').map(Number);
-    const parsed = new Date(
-      year,
-      month - 1,
-      day,
-      endOfDay ? 23 : 0,
-      endOfDay ? 59 : 0,
-      endOfDay ? 59 : 0,
-      endOfDay ? 999 : 0,
-    );
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+    if (!match) {
+      throw new BadRequestException('Ngày lọc không hợp lệ');
+    }
+    const [, yearText, monthText, dayText] = match;
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const calendarDate = new Date(Date.UTC(year, month - 1, day));
     if (
-      !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-      parsed.getFullYear() !== year ||
-      parsed.getMonth() !== month - 1 ||
-      parsed.getDate() !== day
+      calendarDate.getUTCFullYear() !== year ||
+      calendarDate.getUTCMonth() + 1 !== month ||
+      calendarDate.getUTCDate() !== day
     ) {
       throw new BadRequestException('Ngày lọc không hợp lệ');
     }
-    return parsed;
+    const start = organizationDateStart(year, month, day);
+    return endOfDay ? new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1) : start;
   }
 
   async findPendingApprovals(params: {
@@ -494,11 +529,6 @@ export class TasksService {
         updater: {
           select: { id: true, fullName: true },
         },
-        coordinatingDepts: {
-          select: {
-            department: { select: { id: true, code: true, name: true } },
-          },
-        },
         feedbacks: {
           orderBy: { createdAt: 'asc' },
           select: {
@@ -543,7 +573,7 @@ export class TasksService {
       ? new Date(data.requiredCompletionDate)
       : null;
 
-    if (requiredCompletionDate && requiredCompletionDate < assignedDate) {
+    if (requiredCompletionDate && compareDateOnly(requiredCompletionDate, assignedDate) < 0) {
       throw new ForbiddenException(
         'Ngày yêu cầu hoàn thành không được sớm hơn ngày giao nhiệm vụ',
       );
@@ -580,6 +610,8 @@ export class TasksService {
           action: 'CREATE',
           entityType: 'TASK',
           entityId: createdTask.id,
+          fieldName: 'snapshot',
+          newValue: JSON.stringify(createdTask),
         },
       });
 
@@ -608,12 +640,9 @@ export class TasksService {
     );
     if (nhomAKeys.length > 0 && requiredCompletionDate) {
       const d = new Date(requiredCompletionDate);
-      const year = d.getFullYear();
-      const month = d.getMonth() + 1;
+      const { year, month } = organizationDateParts(d);
       const isLocked = await this.periodLockService.isPeriodLocked(year, month);
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
+      const { year: currentYear, month: currentMonth } = organizationDateParts(new Date());
       const isCurrentPeriod = year === currentYear && month === currentMonth;
 
       if (isLocked && !isCurrentPeriod && userRole !== 'ADMIN') {
@@ -728,13 +757,13 @@ export class TasksService {
       requiredCompletionDate ?? oldTask.requiredCompletionDate,
     );
 
-    if (requiredCompletionDate && requiredCompletionDate < assignedDate) {
+    if (requiredCompletionDate && compareDateOnly(requiredCompletionDate, assignedDate) < 0) {
       throw new ForbiddenException(
         'Ngày yêu cầu hoàn thành không được sớm hơn ngày giao nhiệm vụ',
       );
     }
 
-    if (actualCompletionDate && actualCompletionDate < assignedDate) {
+    if (actualCompletionDate && compareDateOnly(actualCompletionDate, assignedDate) < 0) {
       throw new ForbiddenException(
         'Ngày hoàn thành thực tế không được sớm hơn ngày giao nhiệm vụ',
       );
@@ -753,7 +782,7 @@ export class TasksService {
       requiredCompletionDate &&
       actualCompletionDate &&
       isPastDeadline(requiredCompletionDate) &&
-      actualCompletionDate < startOfDay(new Date())
+      compareDateOnly(actualCompletionDate, startOfOrganizationDay(new Date())) < 0
     ) {
       throw new ForbiddenException(
         'Nhiệm vụ đã quá hạn, ngày hoàn thành thực tế không được sớm hơn ngày hiện tại',
@@ -812,54 +841,55 @@ export class TasksService {
       prismaData.actualCompletionDate = new Date(updateData.actualCompletionDate);
     }
 
-    const updatedTask = await this.prisma.task.update({
-      where: { id },
-      data: prismaData,
-      include: {
-        ownerDepartment: true,
-        coordinatingDepts: { include: { department: true } },
-        updater: { select: { id: true, fullName: true } },
-      },
-    });
-
     const fieldsToTrack = [
+      'title',
       'content',
       'source',
       'assignedDate',
       'assignedBy',
       'priority',
       'documentNumber',
+      'coordinatingUnits',
       'ownerDepartmentId',
       'requiredCompletionDate',
       'actualCompletionDate',
       'completionEvidence',
       'incompleteReason',
+      'approvalStatus',
+      'approvedStatus',
+      'approvedAt',
+      'approvedBy',
+      'updatedBy',
+      'version',
     ];
-
-    for (const field of fieldsToTrack) {
-      const oldValue = oldTask?.[field as keyof typeof oldTask];
-      const newValue = updatedTask[field as keyof typeof updatedTask];
-      const oldStr =
-        oldValue instanceof Date
-          ? oldValue.toISOString()
-          : String(oldValue ?? '');
-      const newStr =
-        newValue instanceof Date
-          ? newValue.toISOString()
-          : String(newValue ?? '');
-
-      if (oldStr !== newStr) {
-        await this.auditLogService.log({
-          userId: data.updatedBy,
-          action: 'UPDATE',
-          entityType: 'TASK',
-          entityId: id,
-          fieldName: field,
-          oldValue: oldStr,
-          newValue: newStr,
-        });
+    const updatedTask = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.task.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Task not found');
+      if (current.version !== oldTask.version) {
+        throw new ConflictException(
+          'Nhiệm vụ đã bị thay đổi bởi người khác. Vui lòng tải lại trang.',
+        );
       }
-    }
+
+      const claim = await tx.task.updateMany({
+        where: { id, version: current.version },
+        data: prismaData,
+      });
+      if (claim.count !== 1) {
+        throw new ConflictException(
+          'Nhiệm vụ đã bị thay đổi bởi người khác. Vui lòng tải lại trang.',
+        );
+      }
+      const updated = await tx.task.findUniqueOrThrow({
+        where: { id },
+        include: {
+          ownerDepartment: true,
+          updater: { select: { id: true, fullName: true } },
+        },
+      });
+      await this.auditDiff(tx, data.updatedBy, id, 'UPDATE', current, updated, fieldsToTrack);
+      return updated;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     this.dashboardService.invalidate();
 
@@ -894,8 +924,8 @@ export class TasksService {
     const now = new Date();
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.task.update({
-        where: { id },
+      const claim = await tx.task.updateMany({
+        where: { id, version: task.version, approvalStatus: 'PENDING' },
         data: {
           approvalStatus: 'APPROVED',
           approvedStatus: status,
@@ -904,7 +934,10 @@ export class TasksService {
           version: { increment: 1 },
         },
       });
-      await tx.taskFeedback.create({
+      if (claim.count !== 1) {
+        throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
+      }
+      const feedback = await tx.taskFeedback.create({
         data: {
           taskId: id,
           authorId: approvedBy,
@@ -913,13 +946,25 @@ export class TasksService {
           content: 'Đã duyệt hoàn thành nhiệm vụ',
         },
       });
-    });
-
-    await this.auditLogService.log({
-      userId: approvedBy,
-      action: 'APPROVE_COMPLETION',
-      entityType: 'TASK',
-      entityId: id,
+      await tx.auditLog.create({
+        data: {
+          userId: approvedBy,
+          action: 'APPROVE_COMPLETION',
+          entityType: 'TASK',
+          entityId: id,
+          fieldName: 'feedback',
+          newValue: JSON.stringify({ id: feedback.id, decision: feedback.decision, content: feedback.content }),
+        },
+      });
+      await this.auditDiff(
+        tx,
+        approvedBy,
+        id,
+        'APPROVE_COMPLETION',
+        task,
+        { ...task, approvalStatus: 'APPROVED', approvedStatus: status, approvedAt: now, approvedBy },
+        ['approvalStatus', 'approvedStatus', 'approvedAt', 'approvedBy'],
+      );
     });
 
     this.dashboardService.invalidate();
@@ -947,14 +992,17 @@ export class TasksService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.task.update({
-        where: { id },
+      const claim = await tx.task.updateMany({
+        where: { id, version: task.version, approvalStatus: 'PENDING' },
         data: {
           approvalStatus: 'NEEDS_REVISION',
           version: { increment: 1 },
         },
       });
-      await tx.taskFeedback.create({
+      if (claim.count !== 1) {
+        throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
+      }
+      const feedback = await tx.taskFeedback.create({
         data: {
           taskId: id,
           authorId: requestedBy,
@@ -963,13 +1011,25 @@ export class TasksService {
           content,
         },
       });
-    });
-
-    await this.auditLogService.log({
-      userId: requestedBy,
-      action: 'REQUEST_COMPLETION_REVISION',
-      entityType: 'TASK',
-      entityId: id,
+      await tx.auditLog.create({
+        data: {
+          userId: requestedBy,
+          action: 'REQUEST_COMPLETION_REVISION',
+          entityType: 'TASK',
+          entityId: id,
+          fieldName: 'feedback',
+          newValue: JSON.stringify({ id: feedback.id, decision: feedback.decision, content: feedback.content }),
+        },
+      });
+      await this.auditDiff(
+        tx,
+        requestedBy,
+        id,
+        'REQUEST_COMPLETION_REVISION',
+        task,
+        { ...task, approvalStatus: 'NEEDS_REVISION' },
+        ['approvalStatus'],
+      );
     });
 
     this.dashboardService.invalidate();
@@ -980,62 +1040,69 @@ export class TasksService {
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Task not found');
 
-    const feedback = await this.prisma.taskFeedback.create({
-      data: {
-        taskId: id,
-        authorId,
-        type: 'DIRECTIVE',
-        content,
-      },
-      select: {
-        id: true,
-        type: true,
-        decision: true,
-        content: true,
-        createdAt: true,
-        author: { select: { id: true, fullName: true } },
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const feedback = await tx.taskFeedback.create({
+        data: { taskId: id, authorId, type: 'DIRECTIVE', content },
+        select: {
+          id: true,
+          type: true,
+          decision: true,
+          content: true,
+          createdAt: true,
+          author: { select: { id: true, fullName: true } },
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          userId: authorId,
+          action: 'ADD_TASK_DIRECTIVE',
+          entityType: 'TASK',
+          entityId: id,
+          fieldName: 'directive',
+          newValue: JSON.stringify(feedback),
+        },
+      });
+      return feedback;
     });
-    await this.auditLogService.log({
-      userId: authorId,
-      action: 'ADD_TASK_DIRECTIVE',
-      entityType: 'TASK',
-      entityId: id,
-    });
-    return feedback;
   }
 
   async removeDirective(taskId: string, feedbackId: string, deletedBy: string) {
-    const feedback = await this.prisma.taskFeedback.findUnique({
-      where: { id: feedbackId },
-      select: {
-        id: true,
-        taskId: true,
-        authorId: true,
-        type: true,
-        task: { select: { isFinalized: true } },
-      },
-    });
-
-    if (!feedback || feedback.taskId !== taskId) {
-      throw new NotFoundException('Không tìm thấy ý kiến chỉ đạo');
-    }
-    if (feedback.type !== 'DIRECTIVE') {
-      throw new ForbiddenException('Chỉ được xóa ý kiến chỉ đạo');
-    }
-    if (feedback.authorId !== deletedBy) {
-      throw new ForbiddenException('Bạn chỉ được xóa ý kiến do mình tạo');
-    }
-    if (feedback.task.isFinalized) {
-      throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể xóa ý kiến');
-    }
-
-    await this.prisma.taskFeedback.delete({ where: { id: feedbackId } });
-    await this.auditLogService.log({
-      userId: deletedBy,
-      action: 'DELETE_TASK_DIRECTIVE',
-      entityType: 'TASK',
-      entityId: taskId,
+    await this.prisma.$transaction(async (tx) => {
+      const feedback = await tx.taskFeedback.findUnique({
+        where: { id: feedbackId },
+        select: {
+          id: true,
+          taskId: true,
+          authorId: true,
+          type: true,
+          content: true,
+          task: { select: { isFinalized: true } },
+        },
+      });
+      if (!feedback || feedback.taskId !== taskId) {
+        throw new NotFoundException('Không tìm thấy ý kiến chỉ đạo');
+      }
+      if (feedback.type !== 'DIRECTIVE') {
+        throw new ForbiddenException('Chỉ được xóa ý kiến chỉ đạo');
+      }
+      if (feedback.authorId !== deletedBy) {
+        throw new ForbiddenException('Bạn chỉ được xóa ý kiến do mình tạo');
+      }
+      if (feedback.task.isFinalized) {
+        throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể xóa ý kiến');
+      }
+      await tx.taskFeedback.delete({ where: { id: feedbackId } });
+      await tx.auditLog.create({
+        data: {
+          userId: deletedBy,
+          action: 'DELETE_TASK_DIRECTIVE',
+          entityType: 'TASK',
+          entityId: taskId,
+          fieldName: 'directive',
+          oldValue: JSON.stringify({ id: feedback.id, authorId: feedback.authorId, type: feedback.type, content: feedback.content }),
+          newValue: null,
+        },
+      });
     });
 
     return { success: true };
@@ -1044,28 +1111,34 @@ export class TasksService {
   async cancel(id: string, cancelledBy: string, userRole: string) {
     const existingTask = await this.prisma.task.findUnique({ where: { id } });
     if (!existingTask) throw new NotFoundException('Task not found');
+    if (existingTask.isCancelled) {
+      throw new ConflictException('Nhiệm vụ đã được hủy');
+    }
     if (existingTask.isFinalized && userRole !== 'ADMIN') {
       throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể hủy');
     }
 
-    const task = await this.prisma.task.update({
-      where: { id },
-      data: {
-        isCancelled: true,
-        cancelledAt: new Date(),
-        cancelledBy,
-      },
-      include: {
-        ownerDepartment: true,
-        coordinatingDepts: { include: { department: true } },
-      },
-    });
-
-    await this.auditLogService.log({
-      userId: cancelledBy,
-      action: 'CANCEL',
-      entityType: 'TASK',
-      entityId: id,
+    const task = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.task.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Task not found');
+      if (current.isCancelled) {
+        throw new ConflictException('Nhiệm vụ đã được hủy');
+      }
+      if (current.version !== existingTask.version) {
+        throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
+      }
+      const now = new Date();
+      const claim = await tx.task.updateMany({
+        where: { id, version: current.version },
+        data: { isCancelled: true, cancelledAt: now, cancelledBy, version: { increment: 1 } },
+      });
+      if (claim.count !== 1) throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
+      const updated = await tx.task.findUniqueOrThrow({
+        where: { id },
+        include: { ownerDepartment: true },
+      });
+      await this.auditDiff(tx, cancelledBy, id, 'CANCEL', current, updated, ['isCancelled', 'cancelledAt', 'cancelledBy']);
+      return updated;
     });
 
     this.dashboardService.invalidate();
@@ -1085,32 +1158,30 @@ export class TasksService {
       throw new ForbiddenException('Nhiệm vụ đã được chốt');
     }
 
-    if (userRole === 'DEPARTMENT_EDITOR') {
-      if (
-        task.ownerDepartmentId !== (await this.getDepartmentId(finalizedBy))
-      ) {
-        throw new ForbiddenException('Chỉ chủ nhiệm vụ mới được chốt');
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.task.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Task not found');
+      if (current.version !== task.version || current.isFinalized) {
+        throw new ConflictException('Nhiệm vụ đã thay đổi hoặc đã được chốt');
       }
-    }
-
-    const updated = await this.prisma.task.update({
-      where: { id },
-      data: {
-        isFinalized: true,
-        finalizedAt: new Date(),
-        finalizedBy,
-      },
-      include: {
-        ownerDepartment: true,
-        coordinatingDepts: { include: { department: true } },
-      },
-    });
-
-    await this.auditLogService.log({
-      userId: finalizedBy,
-      action: 'FINALIZE',
-      entityType: 'TASK',
-      entityId: id,
+      if (userRole === 'DEPARTMENT_EDITOR') {
+        const actor = await tx.user.findUnique({ where: { id: finalizedBy }, select: { departmentId: true } });
+        if (current.ownerDepartmentId !== (actor?.departmentId ?? '')) {
+          throw new ForbiddenException('Chỉ chủ nhiệm vụ mới được chốt');
+        }
+      }
+      const now = new Date();
+      const claim = await tx.task.updateMany({
+        where: { id, version: current.version, isFinalized: false },
+        data: { isFinalized: true, finalizedAt: now, finalizedBy, version: { increment: 1 } },
+      });
+      if (claim.count !== 1) throw new ConflictException('Nhiệm vụ đã thay đổi hoặc đã được chốt');
+      const result = await tx.task.findUniqueOrThrow({
+        where: { id },
+        include: { ownerDepartment: true },
+      });
+      await this.auditDiff(tx, finalizedBy, id, 'FINALIZE', current, result, ['isFinalized', 'finalizedAt', 'finalizedBy']);
+      return result;
     });
 
     return updated;
@@ -1124,24 +1195,23 @@ export class TasksService {
       throw new ForbiddenException('Nhiệm vụ chưa được chốt');
     }
 
-    const updated = await this.prisma.task.update({
-      where: { id },
-      data: {
-        isFinalized: false,
-        finalizedAt: null,
-        finalizedBy: null,
-      },
-      include: {
-        ownerDepartment: true,
-        coordinatingDepts: { include: { department: true } },
-      },
-    });
-
-    await this.auditLogService.log({
-      userId: unfinalizedBy,
-      action: 'UNFINALIZE',
-      entityType: 'TASK',
-      entityId: id,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const current = await tx.task.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Task not found');
+      if (current.version !== task.version || !current.isFinalized) {
+        throw new ConflictException('Nhiệm vụ đã thay đổi hoặc chưa được chốt');
+      }
+      const claim = await tx.task.updateMany({
+        where: { id, version: current.version, isFinalized: true },
+        data: { isFinalized: false, finalizedAt: null, finalizedBy: null, version: { increment: 1 } },
+      });
+      if (claim.count !== 1) throw new ConflictException('Nhiệm vụ đã thay đổi hoặc chưa được chốt');
+      const result = await tx.task.findUniqueOrThrow({
+        where: { id },
+        include: { ownerDepartment: true },
+      });
+      await this.auditDiff(tx, unfinalizedBy, id, 'UNFINALIZE', current, result, ['isFinalized', 'finalizedAt', 'finalizedBy']);
+      return result;
     });
 
     return updated;
@@ -1175,14 +1245,28 @@ export class TasksService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.taskCoordinatingDepartment.deleteMany({ where: { taskId: id } });
-      await tx.task.delete({ where: { id } });
+      const current = await tx.task.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Task not found');
+      if (current.version !== task.version) {
+        throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
+      }
+      const feedbacks = await tx.taskFeedback.findMany({
+        where: { taskId: id },
+        include: { readReceipts: true },
+      });
+      const deleted = await tx.task.deleteMany({ where: { id, version: current.version } });
+      if (deleted.count !== 1) {
+        throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
+      }
       await tx.auditLog.create({
         data: {
           userId: deletedBy,
           action: 'DELETE',
           entityType: 'TASK',
           entityId: id,
+          fieldName: 'snapshot',
+          oldValue: JSON.stringify({ task: current, feedbacks }),
+          newValue: null,
         },
       });
     });

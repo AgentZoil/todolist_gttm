@@ -17,7 +17,6 @@ import {
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,7 +29,7 @@ export default function RegisterPage() {
     try {
       await apiFetch("/users/register", {
         method: "POST",
-        body: JSON.stringify({ email, fullName, password }),
+        body: JSON.stringify({ email, fullName }),
       });
       setSuccess(true);
     } catch (err) {
@@ -58,7 +57,7 @@ export default function RegisterPage() {
           {success ? (
             <div className="space-y-4 text-center">
               <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                Đã gửi yêu cầu. Vui lòng chờ Admin duyệt trước khi đăng nhập.
+                Đã gửi yêu cầu. Nếu được duyệt, liên kết tạo mật khẩu sẽ được gửi tới email này.
               </p>
               <Link href="/login" className="text-sm font-semibold text-primary hover:underline">
                 Quay lại đăng nhập
@@ -73,10 +72,6 @@ export default function RegisterPage() {
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Mật khẩu</Label>
-                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={loading} className="w-full">

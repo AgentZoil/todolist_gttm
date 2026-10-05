@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AuditLogService } from './audit-log.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -11,9 +11,12 @@ export class AuditLogController {
 
   @Get()
   @Roles('ADMIN')
-  async findAll() {
-    const logs = await this.auditLogService.findAll();
-    return { data: logs };
+  async findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+    const result = await this.auditLogService.findAll(Number(page), Number(limit));
+    return {
+      data: result.data,
+      meta: { total: result.total, page: result.page, limit: result.limit },
+    };
   }
 
   @Get(':id')

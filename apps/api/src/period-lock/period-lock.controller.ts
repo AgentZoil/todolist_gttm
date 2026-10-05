@@ -40,8 +40,12 @@ export class PeriodLockController {
 
   @Delete(':year/:month')
   @Roles('ADMIN')
-  async unlock(@Param('year') year: string, @Param('month') month: string) {
-    await this.periodLockService.unlockPeriod(Number(year), Number(month));
+  async unlock(
+    @Param('year') year: string,
+    @Param('month') month: string,
+    @CurrentUser() user: { id: string },
+  ) {
+    await this.periodLockService.unlockPeriod(Number(year), Number(month), user.id);
     return { message: 'Unlocked' };
   }
 }

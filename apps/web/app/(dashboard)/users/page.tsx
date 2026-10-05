@@ -17,6 +17,7 @@ interface Department {
   id: string;
   code: string;
   name: string;
+  isActive?: boolean;
 }
 
 interface User {
@@ -65,6 +66,8 @@ export default function UsersPage() {
   const [approvalRoles, setApprovalRoles] = useState<Record<string, string>>({});
   const [approvalDepartments, setApprovalDepartments] = useState<Record<string, string>>({});
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  const [userDrafts, setUserDrafts] = useState<Record<string, { roleId: string; departmentId: string }>>({});
+  const [processingUser, setProcessingUser] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<{ data: { role: string } }>("/auth/me")
@@ -145,6 +148,27 @@ export default function UsersPage() {
     }
   };
 
+  const updateUser = async (user: User, changes: { roleId?: string; departmentId?: string | null; isActive?: boolean }) => {
+    setProcessingUser(user.id);
+    setError(null);
+    try {
+      const response = await apiFetch<{ data: User }>(`/users/${user.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(changes),
+      });
+      setUsers((current) => current.map((item) => item.id === user.id ? response.data : item));
+      setUserDrafts((current) => {
+        const next = { ...current };
+        delete next[user.id];
+        return next;
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể cập nhật tài khoản");
+    } finally {
+      setProcessingUser(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -156,21 +180,17 @@ export default function UsersPage() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Card className="max-w-sm w-full">
-          <CardContent className="flex flex-col items-center gap-3 py-8">
-            <AlertTriangle className="h-10 w-10 text-destructive" />
-            <p className="text-destructive font-medium">Lỗi: {error}</p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
+      {error && (
+        <Card className="border-destructive/30">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <p className="flex-1 text-sm text-destructive">{error}</p>
+            <Button variant="outline" size="sm" onClick={() => setError(null)}>Đóng</Button>
+          </CardContent>
+        </Card>
+      )}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Người dùng</h1>
@@ -188,7 +208,7 @@ export default function UsersPage() {
                 <UserRoundCheck className="h-4 w-4 text-primary" />
                 Yêu cầu đăng ký chờ duyệt
               </h2>
-              <p className="mt-1 text-xs text-muted-foreground">Chỉ tài khoản được duyệt mới đăng nhập và sử dụng hệ thống.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Sau khi duyệt, liên kết tạo mật khẩu gửi tới email đăng ký; chỉ người mở được hộp thư mới kích hoạt được tài khoản.</p>
             </div>
             <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
               {registrationRequests.filter((request) => request.status === "PENDING").length}
@@ -227,7 +247,7 @@ export default function UsersPage() {
                           disabled={busy}
                         >
                           <option value="">Chọn phòng ban</option>
-                          {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                          {departments.filter((department) => department.isActive !== false).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                         </select>
                       )}
                       <Button size="sm" onClick={() => void approveRequest(request)} disabled={busy || !selectedRoleId}>
@@ -265,13 +285,14 @@ export default function UsersPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái
                 </th>
+                {isAdmin && <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quản lý</th>}
               </tr>
             </thead>
             <tbody>
               {users.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={isAdmin ? 6 : 5}
                     className="px-4 py-16 text-center text-muted-foreground"
                   >
                     <div className="flex flex-col items-center gap-2">
@@ -285,6 +306,12 @@ export default function UsersPage() {
                   const isEven = index % 2 === 0;
                   const roleBadge =
                     ROLE_BADGE[user.role.name] || ROLE_BADGE.VIEWER;
+                  const draft = userDrafts[user.id] || {
+                    roleId: user.role.id,
+                    departmentId: user.department?.id || "",
+                  };
+                  const draftRole = roles.find((role) => role.id === draft.roleId)?.name;
+                  const busy = processingUser === user.id;
                   return (
                     <tr
                       key={user.id}
@@ -300,17 +327,35 @@ export default function UsersPage() {
                         <span className="font-medium">{user.fullName}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={cn(
-                            "inline-flex h-6 items-center justify-center rounded-full px-2.5 text-xs font-semibold ring-1",
-                            roleBadge
-                          )}
-                        >
-                          {ROLE_LABEL[user.role.name] || user.role.name}
-                        </span>
+                        {isAdmin ? (
+                          <select
+                            aria-label={`Vai trò của ${user.fullName}`}
+                            value={draft.roleId}
+                            onChange={(event) => setUserDrafts({ ...userDrafts, [user.id]: { ...draft, roleId: event.target.value } })}
+                            className="h-9 rounded-lg border border-border bg-card px-3 text-sm"
+                            disabled={busy}
+                          >
+                            {roles.map((role) => <option key={role.id} value={role.id}>{ROLE_LABEL[role.name] || role.name}</option>)}
+                          </select>
+                        ) : (
+                          <span className={cn("inline-flex h-6 items-center justify-center rounded-full px-2.5 text-xs font-semibold ring-1", roleBadge)}>
+                            {ROLE_LABEL[user.role.name] || user.role.name}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        {user.department?.name || "—"}
+                        {isAdmin && draftRole === "DEPARTMENT_EDITOR" ? (
+                          <select
+                            aria-label={`Phòng ban của ${user.fullName}`}
+                            value={draft.departmentId}
+                            onChange={(event) => setUserDrafts({ ...userDrafts, [user.id]: { ...draft, departmentId: event.target.value } })}
+                            className="h-9 rounded-lg border border-border bg-card px-3 text-sm"
+                            disabled={busy}
+                          >
+                            <option value="">Chọn phòng ban</option>
+                            {departments.filter((department) => department.isActive !== false).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                          </select>
+                        ) : user.department?.name || "—"}
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-1.5 text-sm">
@@ -323,6 +368,36 @@ export default function UsersPage() {
                           {user.isActive ? "Đang hoạt động" : "Ngừng hoạt động"}
                         </span>
                       </td>
+                      {isAdmin && (
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={busy || (draft.roleId === user.role.id && (draftRole !== "DEPARTMENT_EDITOR" || draft.departmentId === (user.department?.id || "")))}
+                              onClick={() => void updateUser(user, {
+                                roleId: draft.roleId,
+                                departmentId: draftRole === "DEPARTMENT_EDITOR" ? draft.departmentId : null,
+                              })}
+                            >
+                              {busy ? "Đang lưu..." : "Lưu"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={user.isActive ? "destructive" : "outline"}
+                              disabled={busy}
+                              onClick={() => {
+                                const action = user.isActive ? "vô hiệu hóa" : "kích hoạt lại";
+                                if (window.confirm(`Bạn có chắc muốn ${action} tài khoản ${user.fullName}?`)) {
+                                  void updateUser(user, { isActive: !user.isActive });
+                                }
+                              }}
+                            >
+                              {user.isActive ? "Vô hiệu hóa" : "Kích hoạt"}
+                            </Button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })

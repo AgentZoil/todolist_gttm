@@ -89,6 +89,11 @@ export default function LoginPage() {
                 className="rounded-lg"
               />
             </div>
+            <p className="-mt-2 text-right text-sm">
+              <Link href="/forgot-password" className="font-semibold text-primary hover:underline">
+                Quên mật khẩu?
+              </Link>
+            </p>
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}

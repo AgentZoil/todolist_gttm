@@ -2,13 +2,14 @@ import {
   IsEmail,
   IsNotEmpty,
   IsOptional,
+  IsBoolean,
   IsString,
   MaxLength,
-  MinLength,
 } from 'class-validator';
 
 export class RegisterUserDto {
   @IsEmail()
+  @MaxLength(254)
   email: string;
 
   @IsString()
@@ -16,10 +17,21 @@ export class RegisterUserDto {
   @MaxLength(200)
   fullName: string;
 
+}
+
+export class UpdateUserDto {
+  @IsOptional()
   @IsString()
-  @MinLength(6)
-  @MaxLength(100)
-  password: string;
+  @IsNotEmpty()
+  roleId?: string;
+
+  @IsOptional()
+  @IsString()
+  departmentId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class ApproveRegistrationDto {

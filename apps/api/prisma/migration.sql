@@ -135,13 +135,6 @@ CREATE INDEX IF NOT EXISTS idx_tasks_is_finalized ON tasks(is_finalized);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_owner_dept_req_date ON tasks(owner_department_id, required_completion_date);
 
--- Task Coordinating Departments
-CREATE TABLE IF NOT EXISTS task_coordinating_departments (
-  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  department_id TEXT NOT NULL REFERENCES departments(id) ON DELETE CASCADE,
-  PRIMARY KEY (task_id, department_id)
-);
-
 -- Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,

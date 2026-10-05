@@ -13,6 +13,9 @@ import {
   PlusCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+
+const PAGE_SIZE = 50;
 
 interface AuditLog {
   id: string;
@@ -23,10 +26,75 @@ interface AuditLog {
   oldValue?: string;
   newValue?: string;
   createdAt: string;
-  user: { id: string; fullName: string };
+  user: { id: string; fullName: string } | null;
 }
 
 const ACTION_STYLE: Record<string, { badge: string; icon: React.ElementType; label: string }> = {
+  SUBMIT_REGISTRATION: {
+    badge: "bg-blue-50 text-blue-700 ring-blue-200",
+    icon: PlusCircle,
+    label: "Gửi yêu cầu đăng ký",
+  },
+  APPROVE_REGISTRATION: {
+    badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    icon: PlusCircle,
+    label: "Duyệt đăng ký",
+  },
+  REJECT_REGISTRATION: {
+    badge: "bg-red-50 text-red-600 ring-red-200",
+    icon: Trash2,
+    label: "Từ chối đăng ký",
+  },
+  CREATE_USER: {
+    badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    icon: PlusCircle,
+    label: "Cấp tài khoản",
+  },
+  UPDATE_USER: {
+    badge: "bg-blue-50 text-blue-700 ring-blue-200",
+    icon: Edit3,
+    label: "Cập nhật tài khoản",
+  },
+  CREATE_DEPARTMENT: {
+    badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    icon: PlusCircle,
+    label: "Tạo phòng ban",
+  },
+  UPDATE_DEPARTMENT: {
+    badge: "bg-blue-50 text-blue-700 ring-blue-200",
+    icon: Edit3,
+    label: "Cập nhật phòng ban",
+  },
+  LOCK_PERIOD: {
+    badge: "bg-amber-50 text-amber-700 ring-amber-200",
+    icon: Edit3,
+    label: "Khóa kỳ",
+  },
+  UNLOCK_PERIOD: {
+    badge: "bg-purple-50 text-purple-700 ring-purple-200",
+    icon: Edit3,
+    label: "Mở khóa kỳ",
+  },
+  APPROVE_COMPLETION: {
+    badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    icon: Edit3,
+    label: "Duyệt hoàn thành",
+  },
+  REQUEST_COMPLETION_REVISION: {
+    badge: "bg-orange-50 text-orange-600 ring-orange-200",
+    icon: Edit3,
+    label: "Yêu cầu bổ sung",
+  },
+  ADD_TASK_DIRECTIVE: {
+    badge: "bg-blue-50 text-blue-700 ring-blue-200",
+    icon: PlusCircle,
+    label: "Thêm ý kiến chỉ đạo",
+  },
+  DELETE_TASK_DIRECTIVE: {
+    badge: "bg-red-50 text-red-600 ring-red-200",
+    icon: Trash2,
+    label: "Xóa ý kiến chỉ đạo",
+  },
   CREATE: {
     badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
     icon: PlusCircle,
@@ -64,22 +132,31 @@ export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
     apiFetch<{ data: { role: string } }>("/auth/me")
       .then((res) => {
         if (res.data.role !== "ADMIN") {
           router.replace("/dashboard");
           return;
         }
-        return apiFetch<{ data: AuditLog[] }>("/audit-logs");
+        return apiFetch<{ data: AuditLog[]; meta: { total: number } }>(`/audit-logs?page=${page}&limit=${PAGE_SIZE}`);
       })
       .then((res) => {
-        if (res) setLogs(res.data);
+        if (active && res) {
+          setLogs(res.data);
+          setTotal(res.meta.total);
+        }
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((err) => { if (active) setError(err.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [page, router]);
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString("vi-VN");
@@ -116,7 +193,7 @@ export default function AuditLogsPage() {
           <ScrollText className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight">Nhật ký hoạt động</h1>
           <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary ring-1 ring-primary/20">
-            {logs.length}
+            {total}
           </span>
         </div>
         <p className="text-sm text-muted-foreground mt-1">
@@ -187,9 +264,9 @@ export default function AuditLogsPage() {
                       <td className="px-4 py-3">
                         <span className="inline-flex items-center gap-1.5">
                           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground ring-1 ring-border">
-                            {log.user.fullName.charAt(0)}
+                            {log.user?.fullName.charAt(0) || "?"}
                           </span>
-                          {log.user.fullName}
+                          {log.user?.fullName || "Khách / hệ thống"}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -246,6 +323,20 @@ export default function AuditLogsPage() {
           </table>
         </div>
       </Card>
+      <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+        <span>
+          {total === 0 ? "Chưa có nhật ký" : `Đang xem ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, total)} trên ${total}`}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" disabled={page <= 1 || loading} onClick={() => setPage((current) => current - 1)}>
+            Trước
+          </Button>
+          <span>{page} / {Math.max(1, Math.ceil(total / PAGE_SIZE))}</span>
+          <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / PAGE_SIZE) || loading} onClick={() => setPage((current) => current + 1)}>
+            Sau
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

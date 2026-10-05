@@ -11,6 +11,7 @@ services:
       - SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}
       - SUPABASE_SECRET_KEY=${SUPABASE_SECRET_KEY}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
       - PORT=3001
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--spider", "--tries=1", "http://127.0.0.1:3001/api/auth/status"]

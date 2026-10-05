@@ -14,24 +14,47 @@ export interface TaskStatusInput {
   now?: Date;
 }
 
-export function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const ORGANIZATION_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const ORGANIZATION_UTC_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function dateOrdinal(date: Date): number {
+  const { year, month, day } = organizationDateParts(date);
+  return Date.UTC(year, month - 1, day) / DAY_IN_MS;
 }
 
-export function endOfDay(date: Date): Date {
-  return new Date(
-    date.getFullYear(),
-    date.getMonth(),
-    date.getDate(),
-    23,
-    59,
-    59,
-    999,
-  );
+export function organizationDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ORGANIZATION_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+  };
+}
+
+export function compareDateOnly(left: Date, right: Date): number {
+  return dateOrdinal(left) - dateOrdinal(right);
+}
+
+export function organizationDateStart(year: number, month: number, day: number): Date {
+  return new Date(Date.UTC(year, month - 1, day) - ORGANIZATION_UTC_OFFSET_MS);
+}
+
+export function startOfOrganizationDay(date: Date): Date {
+  const { year, month, day } = organizationDateParts(date);
+  return organizationDateStart(year, month, day);
 }
 
 export function isPastDeadline(requiredCompletionDate: Date, now = new Date()): boolean {
-  return now.getTime() > endOfDay(requiredCompletionDate).getTime();
+  const today = organizationDateParts(now);
+  const todayOrdinal = Date.UTC(today.year, today.month - 1, today.day) / DAY_IN_MS;
+  return todayOrdinal > dateOrdinal(requiredCompletionDate);
 }
 
 export function calculateTaskStatus(task: TaskStatusInput): TaskStatus {
@@ -49,8 +72,8 @@ export function calculateTaskStatus(task: TaskStatusInput): TaskStatus {
       : 'IN_PROGRESS';
   }
 
-  const required = task.requiredCompletionDate.getTime();
-  const actual = task.actualCompletionDate.getTime();
+  const required = dateOrdinal(task.requiredCompletionDate);
+  const actual = dateOrdinal(task.actualCompletionDate);
 
   if (actual < required) {
     return 'COMPLETED_EARLY';

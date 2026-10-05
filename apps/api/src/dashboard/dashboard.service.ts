@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { calculateTaskStatus } from '../tasks/status';
+import {
+  calculateTaskStatus,
+  organizationDateParts,
+  organizationDateStart,
+} from '../tasks/status';
 
 interface CacheEntry<T> {
   data: T;
@@ -45,7 +49,8 @@ export class DashboardService {
   }
 
   private getTargetMonth(month?: string) {
-    const targetMonth = month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const today = organizationDateParts(new Date());
+    const targetMonth = month || `${today.year}-${String(today.month).padStart(2, '0')}`;
     if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(targetMonth)) {
       throw new BadRequestException('Tháng dashboard không hợp lệ');
     }
@@ -59,8 +64,8 @@ export class DashboardService {
     if (cached) return cached;
 
     const [year, monthNum] = targetMonth.split('-').map(Number);
-    const startDate = new Date(year, monthNum - 1, 1);
-    const endDate = new Date(year, monthNum, 0, 23, 59, 59);
+    const startDate = organizationDateStart(year, monthNum, 1);
+    const endDate = new Date(organizationDateStart(year, monthNum + 1, 1).getTime() - 1);
 
     const tasks = await this.prisma.task.findMany({
       where: {
@@ -135,8 +140,8 @@ export class DashboardService {
     if (cached) return cached;
 
     const [year, monthNum] = targetMonth.split('-').map(Number);
-    const startDate = new Date(year, monthNum - 1, 1);
-    const endDate = new Date(year, monthNum, 0, 23, 59, 59);
+    const startDate = organizationDateStart(year, monthNum, 1);
+    const endDate = new Date(organizationDateStart(year, monthNum + 1, 1).getTime() - 1);
 
     const departments = await this.prisma.department.findMany({
       where: { isActive: true },

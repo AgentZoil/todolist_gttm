@@ -11,6 +11,7 @@ import { DepartmentsService } from './departments.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { CurrentUser } from '../auth/current-user.decorator';
 
 @Controller('departments')
 @UseGuards(AuthGuard, RolesGuard)
@@ -25,8 +26,11 @@ export class DepartmentsController {
 
   @Post()
   @Roles('ADMIN')
-  async create(@Body() body: { code: string; name: string }) {
-    const department = await this.departmentsService.create(body);
+  async create(
+    @Body() body: { code: string; name: string },
+    @CurrentUser() user: { id: string },
+  ) {
+    const department = await this.departmentsService.create({ ...body, createdBy: user.id });
     return { data: department };
   }
 
@@ -35,8 +39,9 @@ export class DepartmentsController {
   async update(
     @Param('id') id: string,
     @Body() body: { name?: string; isActive?: boolean },
+    @CurrentUser() user: { id: string },
   ) {
-    const department = await this.departmentsService.update(id, body);
+    const department = await this.departmentsService.update(id, body, user.id);
     return { data: department };
   }
 }

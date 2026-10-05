@@ -29,7 +29,6 @@ model Department {
 
   users             User[]
   ownedTasks        Task[]                       @relation("TaskOwner")
-  coordinatingTasks TaskCoordinatingDepartment[]
 
   @@map("departments")
 }
@@ -149,7 +148,6 @@ model Task {
   ownerDepartment   Department                   @relation("TaskOwner", fields: [ownerDepartmentId], references: [id])
   creator           User                         @relation("TaskCreator", fields: [createdBy], references: [id])
   updater           User?                        @relation("TaskUpdater", fields: [updatedBy], references: [id])
-  coordinatingDepts TaskCoordinatingDepartment[]
   feedbacks         TaskFeedback[]
 
   @@index([ownerDepartmentId])
@@ -192,20 +190,9 @@ model TaskFeedbackRead {
   @@map("task_feedback_reads")
 }
 
-model TaskCoordinatingDepartment {
-  taskId       String @map("task_id")
-  departmentId String @map("department_id")
-
-  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-
-  @@id([taskId, departmentId])
-  @@map("task_coordinating_departments")
-}
-
 model AuditLog {
   id         String   @id @default(uuid())
-  userId     String   @map("user_id")
+  userId     String?  @map("user_id")
   action     String
   entityType String   @map("entity_type")
   entityId   String   @map("entity_id")
@@ -215,7 +202,7 @@ model AuditLog {
   ipAddress  String?  @map("ip_address")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id])
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([entityId])

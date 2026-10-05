@@ -147,25 +147,47 @@ const STATUS_ICONS: Record<string, LucideIcon> = {
 };
 
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const ORGANIZATION_TIME_ZONE = "Asia/Ho_Chi_Minh";
 
-function getLocalDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+function getOrganizationDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ORGANIZATION_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+  };
 }
 
-function getDayDifference(later: Date, earlier: Date) {
-  return Math.round((getLocalDay(later).getTime() - getLocalDay(earlier).getTime()) / DAY_IN_MS);
+function getTaskDayOrdinal(date: Date) {
+  const { year, month, day } = getOrganizationDateParts(date);
+  return Date.UTC(year, month - 1, day) / DAY_IN_MS;
+}
+
+function getOrganizationDayOrdinal(now: Date) {
+  return getTaskDayOrdinal(now);
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return "";
+  const { year, month, day } = getOrganizationDateParts(new Date(value));
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function getRealtimeStatus(task: Pick<Task, "isCancelled" | "requiredCompletionDate" | "actualCompletionDate">, now: Date) {
   if (task.isCancelled) return "CANCELLED";
   if (!task.requiredCompletionDate) return "NO_EVALUATION";
   if (!task.actualCompletionDate) {
-    const deadline = new Date(task.requiredCompletionDate);
-    const deadlineEnd = new Date(deadline.getFullYear(), deadline.getMonth(), deadline.getDate(), 23, 59, 59, 999);
-    return now.getTime() > deadlineEnd.getTime() ? "INCOMPLETE" : "IN_PROGRESS";
+    const deadline = getTaskDayOrdinal(new Date(task.requiredCompletionDate));
+    return getOrganizationDayOrdinal(now) > deadline ? "INCOMPLETE" : "IN_PROGRESS";
   }
 
-  const difference = getDayDifference(new Date(task.actualCompletionDate), new Date(task.requiredCompletionDate));
+  const difference = getTaskDayOrdinal(new Date(task.actualCompletionDate)) - getTaskDayOrdinal(new Date(task.requiredCompletionDate));
   if (difference < 0) return "COMPLETED_EARLY";
   if (difference === 0) return "COMPLETED_ON_TIME";
   return "COMPLETED_LATE";
@@ -181,13 +203,13 @@ function getDeadlineSummary(task: Pick<Task, "isCancelled" | "requiredCompletion
 
   const requiredDate = new Date(task.requiredCompletionDate);
   if (!task.actualCompletionDate) {
-    const days = getDayDifference(requiredDate, now);
+    const days = getTaskDayOrdinal(requiredDate) - getOrganizationDayOrdinal(now);
     if (days > 0) return { label: `Còn ${days} ngày`, className: "text-blue-600" };
     if (days === 0) return { label: "Hôm nay", className: "text-blue-600" };
     return { label: `Trễ ${Math.abs(days)} ngày`, className: "text-destructive" };
   }
 
-  const days = getDayDifference(requiredDate, new Date(task.actualCompletionDate));
+  const days = getTaskDayOrdinal(requiredDate) - getTaskDayOrdinal(new Date(task.actualCompletionDate));
   if (days > 0) return { label: `Sớm ${days} ngày`, className: "text-emerald-600" };
   if (days === 0) return null;
   return { label: `Trễ ${Math.abs(days)} ngày`, className: "text-orange-600" };
@@ -299,10 +321,7 @@ function PrioritySelector({
 }
 
 function getTodayInputValue() {
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${today.getFullYear()}-${month}-${day}`;
+  return toDateInputValue(new Date().toISOString());
 }
 
 function getActualCompletionMin(requiredCompletionDate: string) {
@@ -317,10 +336,10 @@ function getEditFormData(task: Task): Record<string, string> {
     source: task.source || "",
     assignedBy: task.assignedBy || "",
     priority: task.priority || "NORMAL",
-    assignedDate: task.assignedDate?.split("T")[0] || "",
+    assignedDate: toDateInputValue(task.assignedDate),
     documentNumber: task.documentNumber || "",
-    requiredCompletionDate: task.requiredCompletionDate?.split("T")[0] || "",
-    actualCompletionDate: task.actualCompletionDate?.split("T")[0] || "",
+    requiredCompletionDate: toDateInputValue(task.requiredCompletionDate),
+    actualCompletionDate: toDateInputValue(task.actualCompletionDate),
     completionEvidence: task.completionEvidence || "",
     incompleteReason: task.incompleteReason || "",
     coordinatingUnits: task.coordinatingUnits || "",
@@ -718,7 +737,7 @@ export default function TasksPage() {
         }
       }
     }
-    const assignedDate = editFormData.assignedDate || detailTask.assignedDate?.split("T")[0];
+    const assignedDate = editFormData.assignedDate || toDateInputValue(detailTask.assignedDate);
     if (assignedDate && editFormData.requiredCompletionDate) {
       if (new Date(editFormData.requiredCompletionDate) < new Date(assignedDate)) {
         setValidationMsg("Ngày yêu cầu hoàn thành không được sớm hơn ngày giao nhiệm vụ");
@@ -812,12 +831,12 @@ export default function TasksPage() {
   };
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString("vi-VN");
+    return new Date(date).toLocaleDateString("vi-VN", { timeZone: ORGANIZATION_TIME_ZONE });
   };
 
   const formatDateShort = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return `${d.getDate()}/${d.getMonth() + 1}`;
+    const { day, month } = getOrganizationDateParts(new Date(dateStr));
+    return `${day}/${month}`;
   };
 
 

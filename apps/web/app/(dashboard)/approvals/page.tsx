@@ -66,6 +66,7 @@ interface Pagination {
 }
 
 const REVIEWER_ROLES = ["ADMIN", "LEADER", "SECRETARY"];
+const ORGANIZATION_TIME_ZONE = "Asia/Ho_Chi_Minh";
 
 const STATUS_COLORS: Record<string, string> = {
   IN_PROGRESS: "bg-blue-50 text-blue-700 ring-blue-200",
@@ -77,7 +78,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function formatDate(value?: string) {
-  return value ? new Date(value).toLocaleDateString("vi-VN") : "—";
+  return value ? new Date(value).toLocaleDateString("vi-VN", { timeZone: ORGANIZATION_TIME_ZONE }) : "—";
 }
 
 function formatDateTime(value: string) {

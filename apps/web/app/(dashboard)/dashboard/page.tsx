@@ -31,13 +31,21 @@ const MONTH_LABELS = [
   "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12",
 ];
 
+function getCurrentOrganizationMonth() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return `${values.year}-${values.month}`;
+}
+
 export default function DashboardPage() {
   const [departments, setDepartments] = useState<DepartmentStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState(
-    `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`
-  );
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentOrganizationMonth);
 
   useEffect(() => {
     setLoading(true);

@@ -15,6 +15,7 @@ import type { CurrentUser as CurrentUserType } from '../auth/current-user.type';
 import {
   ApproveRegistrationDto,
   RejectRegistrationDto,
+  UpdateUserDto,
 } from './dto/registration.dto';
 
 @Controller('users')
@@ -27,6 +28,16 @@ export class UsersController {
   async findAll() {
     const users = await this.usersService.findAll();
     return { data: users };
+  }
+
+  @Patch(':id')
+  @Roles('ADMIN')
+  async updateUser(
+    @Param('id') id: string,
+    @Body() body: UpdateUserDto,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return { data: await this.usersService.updateUser(id, body, user.id) };
   }
 
   @Get('registration-requests')

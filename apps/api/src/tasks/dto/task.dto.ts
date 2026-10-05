@@ -5,6 +5,7 @@ import {
   IsDateString,
   MaxLength,
   IsEnum,
+  Matches,
 } from 'class-validator';
 import { TaskPriority } from '@prisma/client';
 
@@ -31,7 +32,8 @@ export class CreateTaskDto {
   @MaxLength(200)
   source: string;
 
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
   @IsNotEmpty()
   assignedDate: string;
 
@@ -58,7 +60,8 @@ export class CreateTaskDto {
   @IsNotEmpty()
   ownerDepartmentId: string;
 
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
   @IsOptional()
   requiredCompletionDate?: string;
 }
@@ -79,7 +82,8 @@ export class UpdateTaskDto {
   @MaxLength(200)
   source?: string;
 
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
   @IsOptional()
   assignedDate?: string;
 
@@ -106,11 +110,13 @@ export class UpdateTaskDto {
   @MaxLength(500)
   coordinatingUnits?: string;
 
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
   @IsOptional()
   requiredCompletionDate?: string;
 
-  @IsDateString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @IsDateString({ strict: true })
   @IsOptional()
   actualCompletionDate?: string;
 

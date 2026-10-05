@@ -1,6 +1,6 @@
 # Kế hoạch triển khai — Trạng thái hiện tại
 
-> Cập nhật: 24/09/2026
+> Cập nhật: 05/10/2026
 >
 > Tài liệu này thay thế plan cũ. Nội dung bám theo code hiện tại, không coi các hạng mục đã hoàn thành là việc cần làm lại.
 
@@ -24,29 +24,30 @@ Browser
 | Hạng mục | Trạng thái |
 |---|---|
 | Login/logout/current user | Hoàn thành |
-| Public registration request | Hoàn thành |
+| Public registration request | Hoàn thành; không nhận mật khẩu, tài khoản chỉ được kích hoạt qua link email sau khi Admin duyệt |
 | Admin list/approve/reject registration | Hoàn thành |
 | Admin cấp role + phòng ban khi approve | Hoàn thành |
 | User bị pending chưa đăng nhập được | Hoàn thành qua Supabase `email_confirm: false` |
 | Admin tạo user trực tiếp bằng flow cũ | Đã bỏ endpoint `POST /api/users` và UI form cũ |
-| User/department management | Đang chạy |
-| Task CRUD, status, approval, cancel, finalize | Đang chạy |
+| Admin quản lý role, phòng ban, kích hoạt/vô hiệu hóa user | Hoàn thành; không cho vô hiệu hóa/hạ quyền Admin cuối cùng |
+| Task CRUD, status, approval, cancel, finalize | Đang chạy; ngày nghiệp vụ dùng `YYYY-MM-DD` theo múi giờ Việt Nam |
 | Dashboard, period lock, optimistic locking | Đang chạy |
-| Audit log field diff | Đang chạy; transaction coverage còn thiếu |
-| Prisma migration cho registration request | Đã tạo và đã deploy |
+| Audit log | Ghi cùng transaction cho task, user, phòng ban, khóa kỳ và duyệt đăng ký; giao diện phân trang toàn bộ lịch sử |
+| Prisma migration | Có migration audit actor và bỏ bảng phối hợp không dùng; phải deploy trước release |
 | Docker API/web image | Đã có; web dùng standalone server |
-| API/Web build, unit test hiện có | Pass |
+| API/Web build, unit test hiện có | Đã pass ở lần audit trước; cần chạy lại sau patch này trước release |
 
 ## 3. Luồng tài khoản hiện tại
 
 ```text
 Visitor
   -> POST /api/users/register
+  -> Auth user với mật khẩu ngẫu nhiên không công khai, email chưa xác minh
   -> UserRegistrationRequest(PENDING)
   -> Admin xem danh sách pending
   -> Approve + chọn role/department
-  -> tạo/activate Supabase user + user nội bộ
-  -> user đăng nhập
+  -> xác minh mailbox qua link đặt mật khẩu
+  -> user tự đặt mật khẩu và đăng nhập
 ```
 
 API chính:
@@ -56,7 +57,8 @@ POST  /api/users/register
 GET   /api/users/registration-requests              Admin
 PATCH /api/users/registration-requests/:id/approve  Admin
 PATCH /api/users/registration-requests/:id/reject   Admin
-GET   /api/users                                     Admin
+GET   /api/users                                     Admin, Secretary
+PATCH /api/users/:id                                 Admin; đổi role/phòng ban/trạng thái
 ```
 
 `POST /api/users` không còn là đường tạo user trực tiếp. Nếu cần tạo tài khoản mới, dùng registration request rồi Admin duyệt.
@@ -71,8 +73,12 @@ SUPABASE_PUBLISHABLE_KEY=...
 SUPABASE_SECRET_KEY=...
 DATABASE_URL=postgresql://...
 ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+FRONTEND_URL=http://localhost:3000
 PORT=3001
 ```
+
+Trong Supabase Auth, thêm `${FRONTEND_URL}/reset-password` vào danh sách Redirect URLs. Không đặt URL production thành localhost.
+Đặt chính sách mật khẩu Supabase tối thiểu 12 ký tự; API rate limit dựa trên IP sau một proxy tin cậy.
 
 ### Frontend `apps/web/.env`
 
@@ -96,7 +102,7 @@ npx prisma migrate status
 npx prisma migrate deploy
 ```
 
-DB hiện hữu đã được baseline các migration cũ; migration registration request mới đã deploy. Không dùng `prisma migrate reset` trên DB thật.
+DB hiện hữu đã được baseline các migration cũ. Chạy `prisma migrate deploy` để áp dụng migration mới trước release; không dùng `prisma migrate reset` trên DB thật.
 
 Seed tùy môi trường:
 
@@ -131,18 +137,24 @@ cd apps/api && npm run start:prod
 
 ## 5. Docker deploy
 
-Tạo `.env` ở root, gồm `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ALLOWED_ORIGINS`, và các biến `NEXT_PUBLIC_*`.
+Tạo `.env` ở root, gồm `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ALLOWED_ORIGINS`, `FRONTEND_URL`, và các biến `NEXT_PUBLIC_*`.
+
+Trước khi nâng cấp production, backup database. Migration mới làm `audit_logs.user_id` nullable và xóa bảng phối hợp cũ. Build image trước, dừng API cũ rồi mới chạy migration để phiên bản cũ không truy cập bảng đang bị xóa.
 
 ```bash
+set -a; source .env; set +a
+docker compose build
+docker compose stop api web
+
 cd apps/api
+npx prisma migrate status
 npx prisma migrate deploy
 npx prisma migrate status
 cd ../..
 
-docker compose build --no-cache
 docker compose up -d
 docker compose ps
-curl http://localhost:3001/api/auth/status
+curl -fsS http://localhost:3001/api/auth/status
 docker compose logs -f api web
 ```
 
@@ -161,11 +173,11 @@ Dùng Vercel cho `apps/web`, Render Free cho `apps/api`, Supabase giữ database
 - Render đọc Blueprint từ [`render.yaml`](./render.yaml), chạy một API service Docker.
 - Vercel project root: `apps/web`.
 - Vercel env: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_API_URL`.
-- Render env: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ALLOWED_ORIGINS`, `PORT=3001`.
+- Render env: `DATABASE_URL`, `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ALLOWED_ORIGINS`, `FRONTEND_URL`, `PORT=3001`.
 - Deploy API trước, lấy URL `onrender.com`, đặt vào `NEXT_PUBLIC_API_URL`, rồi deploy web.
 - Cập nhật `ALLOWED_ORIGINS` trên Render bằng URL Vercel sau khi web deploy xong.
 
-Giới hạn trial: Render Free sleep sau 15 phút idle, chỉ một instance, 750 instance-hours/workspace mỗi tháng; không coi là production. API hiện có throttler toàn cục 100 request/phút/process để chống abuse.
+Giới hạn trial: Render Free sleep sau 15 phút idle, chỉ một instance, 750 instance-hours/workspace mỗi tháng; không coi là production. API giới hạn chung 100 request/phút/process; đăng ký public giới hạn 5 request/phút/IP.
 
 ### Xử lý `Failed to fetch`
 
@@ -186,16 +198,13 @@ curl -i -X OPTIONS http://localhost:3001/api/users/register \
 
 ### P0 — cần xử lý trước production
 
-- Kiểm tra RBAC task list/detail: `GET /api/tasks` hiện cần lọc theo user/department/role đúng yêu cầu nghiệp vụ, không chỉ chặn mutation.
-- Nối quan hệ coordinating department (`TaskCoordinatingDepartment`) vào query/permission; hiện một số flow còn dùng `coordinatingUnits` dạng text.
-- Đưa mutation chính và audit log vào cùng transaction, đặc biệt update/delete/cancel/finalize.
+- Xác nhận phân quyền nhiệm vụ: phòng ban xem được tất cả; đại diện phòng chỉ sửa nhiệm vụ của phòng mình; giữ nguyên các quyền ghi hiện có của Admin/Thư ký/Lãnh đạo theo từng thao tác.
+- Deploy migration xóa `task_coordinating_departments` cũ; trường phối hợp đang dùng chuỗi `coordinatingUnits`.
+- Ngày nhiệm vụ và lọc ngày dùng `YYYY-MM-DD` theo múi giờ `Asia/Ho_Chi_Minh`.
 - Chuẩn hóa validation/error mapping để frontend không chỉ nhận lỗi chung.
-- Thêm rate limit/anti-abuse cho public registration và giới hạn resend/duplicate request.
 
 ### P1 — hardening
 
-- Bảo vệ approve/reject khỏi double-submit và retry đồng thời.
-- Bổ sung deactivate/reactivate user, xử lý user Supabase đã tồn tại nhưng request cũ bị từ chối.
 - Thêm integration tests cho role/department/task visibility và registration approval.
 - Đặt reverse proxy/TLS/domain; cập nhật `ALLOWED_ORIGINS` production, không dùng wildcard.
 - Thiết lập backup/restore drill, secret rotation, log/alert.
@@ -215,8 +224,12 @@ curl -i -X OPTIONS http://localhost:3001/api/users/register \
 - [ ] Web build pass.
 - [ ] Đăng ký public tạo request `PENDING`.
 - [ ] User pending không login được.
-- [ ] Admin approve chọn đúng role/department; user login được.
+- [ ] Admin approve chọn đúng role/department; chỉ mailbox owner đặt mật khẩu và đăng nhập được.
 - [ ] Admin reject không tạo account active.
+- [ ] Admin đổi role/phòng ban, khóa/mở user; không thể khóa Admin cuối cùng.
+- [ ] Redirect URL Supabase trỏ đúng domain; recovery link đặt được mật khẩu.
+- [ ] Password policy Supabase yêu cầu tối thiểu 12 ký tự.
+- [ ] Audit log rollback cùng transaction khi mutation thất bại.
 - [ ] Task permission test pass với từng role.
 - [ ] CORS preflight pass từ domain production.
 - [ ] Docker health/log không có crash loop.

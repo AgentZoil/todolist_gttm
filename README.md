@@ -34,6 +34,7 @@ A task tracking and evaluation system built with NestJS, Next.js, and Supabase.
 SUPABASE_URL=your-project-url
 SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 SUPABASE_SECRET_KEY=your-secret-key
+FRONTEND_URL=http://localhost:3000
 
 # Database (PostgreSQL connection string from Supabase)
 DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
@@ -44,6 +45,8 @@ ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 # Server
 PORT=3001
 ```
+
+Thêm `${FRONTEND_URL}/reset-password` vào Supabase Auth Redirect URLs. Khi deploy, dùng URL web production.
 
 ### Frontend (apps/web/.env)
 
@@ -78,7 +81,7 @@ npx prisma migrate deploy
 npx prisma migrate status
 ```
 
-DB hiện hữu đã được baseline các migration cũ. Không chạy `prisma migrate reset` trên DB thật.
+DB hiện hữu đã được baseline các migration cũ. Chạy `prisma migrate deploy` trước release; không chạy `prisma migrate reset` trên DB thật.
 
 ### 4. Seed the Database
 
@@ -131,6 +134,7 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabas
 SUPABASE_URL=your-project-url
 SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 SUPABASE_SECRET_KEY=your-secret-key
+FRONTEND_URL=http://localhost:3000
 ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
