@@ -175,116 +175,76 @@ export class UsersService {
         'Nếu thông tin đủ điều kiện, yêu cầu sẽ được Admin xem xét qua email đã đăng ký.',
     };
 
-    const existingRequest = await this.prisma.userRegistrationRequest.findFirst({
-      where: { email },
-      orderBy: { createdAt: 'desc' },
-    });
-    if (
-      existingRequest?.status === 'PENDING' ||
-      existingRequest?.status === 'APPROVED'
-    ) {
-      return genericResponse;
-    }
-
-    const existingAuthUser = await this.supabase.getUserByEmail(email);
-    if (existingAuthUser) {
-      const existingUser = await this.prisma.user.findUnique({
-        where: { authUserId: existingAuthUser.id },
-        select: { id: true },
-      });
-      const alreadyConfirmed = Boolean(
-        existingAuthUser.email_confirmed_at || existingAuthUser.confirmed_at,
-      );
-      const isPendingRegistration =
-        existingAuthUser.app_metadata?.registration_pending === true;
-
-      if (
-        existingUser ||
-        alreadyConfirmed ||
-        !isPendingRegistration
-      ) {
-        return genericResponse;
-      }
-    }
-
-    if (existingRequest?.status === 'REJECTED') {
-      // Keep request hidden as REJECTED until Auth reset succeeds. Admin cannot
-      // approve midway through changing its unclaimed random credential.
-      return this.prisma.$transaction(async (tx) => {
-        const claim = await tx.userRegistrationRequest.updateMany({
-          where: { id: existingRequest.id, status: 'REJECTED' },
-          data: {
-            status: 'PENDING',
-            reviewedBy: null,
-            reviewedAt: null,
-            rejectionReason: null,
-            fullName,
-          },
-        });
-        if (claim.count !== 1) return genericResponse;
-
-        const authUser = existingAuthUser
-          ? await this.supabase.resetPendingUser(existingAuthUser.id, fullName)
-          : await this.supabase.createPendingUser(email, fullName);
-        await tx.userRegistrationRequest.update({
-          where: { id: existingRequest.id },
-          data: { authUserId: authUser.id, email },
-        });
-        await tx.auditLog.create({
-          data: {
-            userId: null,
-            action: 'SUBMIT_REGISTRATION',
-            entityType: 'USER_REGISTRATION_REQUEST',
-            entityId: existingRequest.id,
-            fieldName: 'request',
-            oldValue: 'REJECTED',
-            newValue: JSON.stringify({ email, fullName, status: 'PENDING' }),
-          },
-        });
-        return genericResponse;
-      }, { timeout: 15000 });
-    }
-
-    // Public applicants never choose Auth password. Pending Auth records have
-    // only unknown random credential until Admin approves and emails recovery.
-    let authUser = existingAuthUser;
-    if (!authUser) {
-      try {
-        authUser = await this.supabase.createPendingUser(email, fullName);
-      } catch (error) {
-        // Concurrent submissions can create Auth user between lookup and insert.
-        if (await this.supabase.getUserByEmail(email)) return genericResponse;
-        throw error;
-      }
-    }
-    if (!authUser) {
-      throw new BadRequestException('Không thể tiếp nhận yêu cầu đăng ký');
-    }
-
     try {
-      await this.prisma.$transaction(async (tx) => {
-        const savedRequest = await tx.userRegistrationRequest.create({
-          data: { authUserId: authUser.id, email, fullName },
-        });
-        await tx.auditLog.create({
-          data: {
-            userId: null,
-            action: 'SUBMIT_REGISTRATION',
-            entityType: 'USER_REGISTRATION_REQUEST',
-            entityId: savedRequest.id,
-            fieldName: 'request',
-            oldValue: null,
-            newValue: JSON.stringify({ email, fullName, status: 'PENDING' }),
-          },
-        });
-        return savedRequest;
-      });
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const existingRequest = await tx.userRegistrationRequest.findUnique({
+            where: { email },
+          });
+          if (
+            existingRequest?.status === 'PENDING' ||
+            existingRequest?.status === 'APPROVED'
+          ) {
+            return genericResponse;
+          }
+
+          if (existingRequest?.status === 'REJECTED') {
+            const claim = await tx.userRegistrationRequest.updateMany({
+              where: { id: existingRequest.id, status: 'REJECTED' },
+              data: {
+                status: 'PENDING',
+                reviewedBy: null,
+                reviewedAt: null,
+                rejectionReason: null,
+                fullName,
+              },
+            });
+            if (claim.count !== 1) return genericResponse;
+
+            await tx.auditLog.create({
+              data: {
+                userId: null,
+                action: 'SUBMIT_REGISTRATION',
+                entityType: 'USER_REGISTRATION_REQUEST',
+                entityId: existingRequest.id,
+                fieldName: 'request',
+                oldValue: 'REJECTED',
+                newValue: JSON.stringify({ email, fullName, status: 'PENDING' }),
+              },
+            });
+            return genericResponse;
+          }
+
+          const savedRequest = await tx.userRegistrationRequest.create({
+            data: { email, fullName },
+          });
+          await tx.auditLog.create({
+            data: {
+              userId: null,
+              action: 'SUBMIT_REGISTRATION',
+              entityType: 'USER_REGISTRATION_REQUEST',
+              entityId: savedRequest.id,
+              fieldName: 'request',
+              oldValue: null,
+              newValue: JSON.stringify({ email, fullName, status: 'PENDING' }),
+            },
+          });
+          return genericResponse;
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
     } catch (error) {
-      if ((error as { code?: string })?.code === 'P2002') return genericResponse;
+      const code = (error as { code?: string })?.code;
+      // The unique email constraint makes concurrent duplicate submissions safe.
+      if (code === 'P2002') return genericResponse;
+      if (code === 'P2034') {
+        const existingRequest = await this.prisma.userRegistrationRequest.findUnique({
+          where: { email },
+        });
+        if (existingRequest) return genericResponse;
+      }
       throw error;
     }
-
-    return genericResponse;
   }
 
   async findRegistrationRequests() {
@@ -301,6 +261,59 @@ export class UsersService {
     data: { roleId: string; departmentId?: string },
     reviewedBy: string,
   ) {
+    const initialRequest = await this.prisma.userRegistrationRequest.findUnique({
+      where: { id },
+    });
+    if (!initialRequest) {
+      throw new NotFoundException('Không tìm thấy yêu cầu đăng ký');
+    }
+    if (initialRequest.status !== 'PENDING') {
+      throw new ConflictException('Yêu cầu đăng ký đã được xử lý');
+    }
+
+    let authUserId = initialRequest.authUserId;
+    if (!authUserId) {
+      let authUser: Awaited<ReturnType<SupabaseService['createPendingUser']>>;
+      try {
+        authUser = await this.supabase.createPendingUser(
+          initialRequest.email,
+          initialRequest.fullName,
+        );
+      } catch (error) {
+        const authError = error as { code?: string; message?: string };
+        if (
+          authError.code === 'user_already_exists' ||
+          authError.message?.toLowerCase().includes('already registered')
+        ) {
+          throw new ConflictException(
+            'Email này đã có tài khoản Supabase; không thể tự gắn để tránh cấp nhầm tài khoản.',
+          );
+        }
+        throw error;
+      }
+
+      try {
+        const claim = await this.prisma.userRegistrationRequest.updateMany({
+          where: { id, status: 'PENDING', authUserId: null },
+          data: { authUserId: authUser.id },
+        });
+        if (claim.count !== 1) {
+          throw new ConflictException('Yêu cầu đăng ký đã được xử lý');
+        }
+        authUserId = authUser.id;
+      } catch (error) {
+        // Do not leave an unlinked Auth identity if persisting the link fails.
+        await this.supabase.deleteUser(authUser.id).catch(() => undefined);
+        throw error;
+      }
+    }
+    if (!authUserId) {
+      throw new InternalServerErrorException(
+        'Không tạo được tài khoản xác thực cho yêu cầu đăng ký',
+      );
+    }
+    const approvedAuthUserId = authUserId;
+
     return this.prisma.$transaction(
       async (tx) => {
         const request = await tx.userRegistrationRequest.findUnique({
@@ -348,7 +361,7 @@ export class UsersService {
         }
 
         const existingUser = await tx.user.findUnique({
-          where: { authUserId: request.authUserId },
+          where: { authUserId: approvedAuthUserId },
         });
         if (existingUser) {
           throw new ConflictException('Tài khoản này đã được cấp quyền');
@@ -371,7 +384,7 @@ export class UsersService {
           throw new InternalServerErrorException('FRONTEND_URL production phải dùng HTTPS');
         }
         await this.supabase.activateUserAndSendPasswordSetup(
-          request.authUserId,
+          approvedAuthUserId,
           request.email,
           request.fullName,
           new URL('/reset-password', frontendUrl).toString(),
@@ -379,7 +392,7 @@ export class UsersService {
 
         const user = await tx.user.create({
           data: {
-            authUserId: request.authUserId,
+            authUserId: approvedAuthUserId,
             fullName: request.fullName,
             roleId: role.id,
             departmentId,

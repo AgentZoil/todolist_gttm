@@ -27,22 +27,6 @@ export class SupabaseService implements OnModuleInit {
     return this.client;
   }
 
-  async getUserByEmail(email: string) {
-    const perPage = 100;
-    for (let page = 1; ; page += 1) {
-      const { data, error } = await this.client.auth.admin.listUsers({
-        page,
-        perPage,
-      });
-      if (error) throw error;
-      const user = data.users.find(
-        (candidate) => candidate.email?.toLowerCase() === email.toLowerCase(),
-      );
-      if (user) return user;
-      if (data.users.length < perPage) return null;
-    }
-  }
-
   private newUnclaimedPassword() {
     return randomBytes(48).toString('base64url');
   }
@@ -59,21 +43,9 @@ export class SupabaseService implements OnModuleInit {
     return data.user;
   }
 
-  async resetPendingUser(authUserId: string, fullName: string) {
-    const { data: current, error: getError } =
-      await this.client.auth.admin.getUserById(authUserId);
-    if (getError) throw getError;
-    const { data, error } = await this.client.auth.admin.updateUserById(
-      authUserId,
-      {
-        password: this.newUnclaimedPassword(),
-        email_confirm: false,
-        user_metadata: { full_name: fullName },
-        app_metadata: { ...current.user.app_metadata, registration_pending: true },
-      },
-    );
+  async deleteUser(authUserId: string) {
+    const { error } = await this.client.auth.admin.deleteUser(authUserId);
     if (error) throw error;
-    return data.user;
   }
 
   async activateUserAndSendPasswordSetup(

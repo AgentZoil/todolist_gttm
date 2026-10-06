@@ -64,8 +64,8 @@ enum RegistrationRequestStatus {
 
 model UserRegistrationRequest {
   id              String                    @id @default(uuid())
-  authUserId      String                    @unique @map("auth_user_id")
-  email           String
+  authUserId      String?                   @unique @map("auth_user_id")
+  email           String                    @unique
   fullName        String                    @map("full_name")
   status          RegistrationRequestStatus @default(PENDING)
   reviewedBy      String?                   @map("reviewed_by")
@@ -77,7 +77,6 @@ model UserRegistrationRequest {
   reviewer User? @relation("RegistrationReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
-  @@index([email])
   @@map("user_registration_requests")
 }
 
