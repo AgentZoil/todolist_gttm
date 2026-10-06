@@ -1,6 +1,6 @@
 # Kế hoạch triển khai — Trạng thái hiện tại
 
-> Cập nhật: 05/10/2026
+> Cập nhật: 06/10/2026
 >
 > Tài liệu này thay thế plan cũ. Nội dung bám theo code hiện tại, không coi các hạng mục đã hoàn thành là việc cần làm lại.
 
@@ -24,31 +24,36 @@ Browser
 | Hạng mục | Trạng thái |
 |---|---|
 | Login/logout/current user | Hoàn thành |
-| Public registration request | Hoàn thành; không nhận mật khẩu, tài khoản chỉ được kích hoạt qua link email sau khi Admin duyệt |
+| Public registration request | Nhập email, mật khẩu 2 lần; Auth giữ mật khẩu, app DB không lưu; Admin duyệt mới kích hoạt |
+| Password reset request | Email tạo yêu cầu cho Admin; Admin xác minh rồi cấp link một lần, app không gửi email |
 | Admin list/approve/reject registration | Hoàn thành |
 | Admin cấp role + phòng ban khi approve | Hoàn thành |
 | User bị pending chưa đăng nhập được | Hoàn thành qua Supabase `email_confirm: false` |
 | Admin tạo user trực tiếp bằng flow cũ | Đã bỏ endpoint `POST /api/users` và UI form cũ |
-| Admin quản lý role, phòng ban, kích hoạt/vô hiệu hóa user | Hoàn thành; không cho vô hiệu hóa/hạ quyền Admin cuối cùng |
+| Admin quản lý role, phòng ban và xóa user | Hoàn thành; không tự xóa hoặc xóa Admin cuối cùng; chặn xóa khi còn dữ liệu nghiệp vụ liên quan |
 | Task CRUD, status, approval, cancel, finalize | Đang chạy; ngày nghiệp vụ dùng `YYYY-MM-DD` theo múi giờ Việt Nam |
 | Dashboard, period lock, optimistic locking | Đang chạy |
 | Audit log | Ghi cùng transaction cho task, user, phòng ban, khóa kỳ và duyệt đăng ký; giao diện phân trang toàn bộ lịch sử |
-| Prisma migration | Có migration audit actor và bỏ bảng phối hợp không dùng; phải deploy trước release |
+| Prisma migration | Có migration email user và yêu cầu reset mật khẩu; phải deploy trước release |
 | Docker API/web image | Đã có; web dùng standalone server |
-| API/Web build, unit test hiện có | Đã pass ở lần audit trước; cần chạy lại sau patch này trước release |
+| API/Web build và lint phần auth đã sửa | Đã pass sau patch; chưa chạy unit test |
 
 ## 3. Luồng tài khoản hiện tại
 
 ```text
 Visitor
   -> POST /api/users/register
-  -> Auth user với mật khẩu ngẫu nhiên không công khai, email chưa xác minh
-  -> UserRegistrationRequest(PENDING)
+  -> Supabase Auth tạo user với mật khẩu user chọn, email chưa xác minh
+  -> UserRegistrationRequest(PENDING), không lưu mật khẩu vào app DB
   -> Admin xem danh sách pending
   -> Approve + chọn role/department
-  -> xác minh mailbox qua link đặt mật khẩu
-  -> user tự đặt mật khẩu và đăng nhập
+  -> Admin xác minh danh tính qua kênh tin cậy rồi mở tài khoản
+  -> user đăng nhập bằng mật khẩu đã tạo
 ```
+
+Email đăng ký không được xác minh qua mailbox. Nếu Admin chỉ tin email người dùng tự nhập, kẻ khác có thể đăng ký mạo danh email đó. Admin phải đối chiếu danh tính qua nguồn liên hệ đã biết trước khi duyệt.
+
+Quên mật khẩu: người dùng gửi email ở trang quên mật khẩu; phản hồi luôn chung để không lộ email có tài khoản hay không. Yêu cầu chỉ tạo cho tài khoản đang hoạt động, giới hạn 5 lần/phút/IP và mỗi tài khoản có tối đa một yêu cầu chờ. Admin xác minh chủ tài khoản, duyệt rồi sao chép link đặt lại mật khẩu và gửi riêng. Admin không xem/đặt mật khẩu người dùng.
 
 API chính:
 
@@ -57,11 +62,18 @@ POST  /api/users/register
 GET   /api/users/registration-requests              Admin
 PATCH /api/users/registration-requests/:id/approve  Admin
 PATCH /api/users/registration-requests/:id/reject   Admin
+POST  /api/users/password-reset-requests           Public, throttled
+GET   /api/users/password-reset-requests           Admin
+PATCH /api/users/password-reset-requests/:id/approve Admin; sinh recovery link, không gửi email
+PATCH /api/users/password-reset-requests/:id/reject  Admin
 GET   /api/users                                     Admin, Secretary
-PATCH /api/users/:id                                 Admin; đổi role/phòng ban/trạng thái
+PATCH /api/users/:id                                 Admin; đổi role/phòng ban
+DELETE /api/users/:id                                Admin; xóa Auth và hồ sơ nếu không còn nhiệm vụ/feedback/kỳ khóa liên quan
 ```
 
 `POST /api/users` không còn là đường tạo user trực tiếp. Nếu cần tạo tài khoản mới, dùng registration request rồi Admin duyệt.
+
+Migration `20261006120000_add_password_reset_requests` thêm email vào bảng user và bảng yêu cầu đặt lại mật khẩu. Chạy `npx prisma migrate deploy` trước khi dùng flow mới. Reset link cần `FRONTEND_URL` là HTTPS ở production và URL `/reset-password` nằm trong allowlist Supabase Auth. Xác nhận cấu hình notification password-changed riêng của Supabase nếu cần tránh email thông báo bảo mật.
 
 ## 4. Chạy local
 
@@ -226,7 +238,7 @@ curl -i -X OPTIONS http://localhost:3001/api/users/register \
 - [ ] User pending không login được.
 - [ ] Admin approve chọn đúng role/department; chỉ mailbox owner đặt mật khẩu và đăng nhập được.
 - [ ] Admin reject không tạo account active.
-- [ ] Admin đổi role/phòng ban, khóa/mở user; không thể khóa Admin cuối cùng.
+- [ ] Admin đổi role/phòng ban, xóa user không còn dữ liệu liên quan; không thể tự xóa hoặc xóa Admin cuối cùng.
 - [ ] Redirect URL Supabase trỏ đúng domain; recovery link đặt được mật khẩu.
 - [ ] Password policy Supabase yêu cầu tối thiểu 12 ký tự.
 - [ ] Audit log rollback cùng transaction khi mutation thất bại.

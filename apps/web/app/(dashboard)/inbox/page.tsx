@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 interface Feedback {
   type: "DIRECTIVE" | "REVIEW";
   decision?: "APPROVED" | "NEEDS_REVISION";
-  author: { fullName: string };
+  author: { fullName: string } | null;
 }
 
 interface AttentionTask {
@@ -139,7 +139,7 @@ export default function InboxPage() {
                         {needsRevision ? "Yêu cầu bổ sung" : "Ý kiến chỉ đạo"}
                       </span>
                       <span className="text-muted-foreground">
-                        từ {feedback?.author.fullName || "Lãnh đạo/Thư ký"}
+                        từ {feedback?.author?.fullName || "Tài khoản đã xóa"}
                       </span>
                     </div>
                     <div className="mt-1 flex min-w-0 items-baseline gap-1.5">

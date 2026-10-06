@@ -58,7 +58,7 @@ interface Task {
   version: number;
   createdAt: string;
   ownerDepartment: Department;
-  creator: { id: string; fullName: string };
+  creator: { id: string; fullName: string } | null;
   status: string;
   statusLabel: string;
   statusColor: string;
@@ -73,7 +73,7 @@ interface TaskFeedback {
   decision?: "APPROVED" | "NEEDS_REVISION";
   content: string;
   createdAt: string;
-  author: { id: string; fullName: string };
+  author: { id: string; fullName: string } | null;
 }
 
 interface Pagination {

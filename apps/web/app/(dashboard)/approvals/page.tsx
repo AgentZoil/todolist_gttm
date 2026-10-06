@@ -35,7 +35,7 @@ interface TaskFeedback {
   decision?: "APPROVED" | "NEEDS_REVISION";
   content: string;
   createdAt: string;
-  author: { id: string; fullName: string };
+  author: { id: string; fullName: string } | null;
 }
 
 interface ApprovalTask {
@@ -52,7 +52,7 @@ interface ApprovalTask {
   status: string;
   statusLabel: string;
   ownerDepartment: Department;
-  creator: { id: string; fullName: string };
+  creator: { id: string; fullName: string } | null;
   feedbacks?: TaskFeedback[];
   createdAt: string;
   updatedAt: string;
@@ -380,7 +380,7 @@ export default function ApprovalsPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="mt-1 text-lg font-semibold leading-tight text-foreground">{selectedTask.title}</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">Cập nhật {formatDateTime(selectedTask.updatedAt)} · {selectedTask.creator.fullName}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Cập nhật {formatDateTime(selectedTask.updatedAt)} · {selectedTask.creator?.fullName || "Tài khoản đã xóa"}</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                     <span className={cn("rounded-full px-2.5 py-1 text-xs font-medium ring-1", STATUS_COLORS[selectedTask.status] || STATUS_COLORS.NO_EVALUATION)}>{selectedTask.statusLabel}</span>

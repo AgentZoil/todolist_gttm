@@ -36,6 +36,7 @@ model Department {
 model User {
   id           String   @id @default(uuid())
   authUserId   String   @unique @map("auth_user_id")
+  email        String?  @unique
   fullName     String   @map("full_name")
   roleId       String   @map("role_id")
   departmentId String?  @map("department_id")
@@ -46,12 +47,14 @@ model User {
   role       Role        @relation(fields: [roleId], references: [id])
   department Department? @relation(fields: [departmentId], references: [id])
 
-  createdTasks                 Task[]                    @relation("TaskCreator")
-  updatedTasks                 Task[]                    @relation("TaskUpdater")
-  auditLogs                    AuditLog[]
-  taskFeedbacks                TaskFeedback[]
-  taskFeedbackReads            TaskFeedbackRead[]
+  createdTasks                  Task[]                    @relation("TaskCreator")
+  updatedTasks                  Task[]                    @relation("TaskUpdater")
+  auditLogs                     AuditLog[]
+  taskFeedbacks                 TaskFeedback[]
+  taskFeedbackReads             TaskFeedbackRead[]
   reviewedRegistrationRequests UserRegistrationRequest[] @relation("RegistrationReviewer")
+  passwordResetRequest          UserPasswordResetRequest?  @relation("PasswordResetTarget")
+  reviewedPasswordResetRequests UserPasswordResetRequest[] @relation("PasswordResetReviewer")
 
   @@map("users")
 }
@@ -78,6 +81,37 @@ model UserRegistrationRequest {
 
   @@index([status, createdAt])
   @@map("user_registration_requests")
+}
+
+enum PasswordResetRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model UserPasswordResetRequest {
+  id         String                     @id @default(uuid())
+  userId     String                     @unique @map("user_id")
+  status     PasswordResetRequestStatus @default(PENDING)
+  reviewedBy String?                    @map("reviewed_by")
+  reviewedAt DateTime?                  @map("reviewed_at")
+  createdAt  DateTime                   @default(now()) @map("created_at")
+  updatedAt  DateTime                   @updatedAt @map("updated_at")
+
+  user     User  @relation("PasswordResetTarget", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("PasswordResetReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@map("user_password_reset_requests")
+}
+
+model PendingAuthDeletion {
+  authUserId    String    @id @map("auth_user_id")
+  attempts      Int       @default(0)
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("pending_auth_deletions")
 }
 
 enum TaskPriority {
@@ -139,13 +173,13 @@ model Task {
   finalizedAt            DateTime?           @map("finalized_at")
   finalizedBy            String?             @map("finalized_by")
   version                Int                 @default(1)
-  createdBy              String              @map("created_by")
+  createdBy              String?             @map("created_by")
   updatedBy              String?             @map("updated_by")
   createdAt              DateTime            @default(now()) @map("created_at")
   updatedAt              DateTime            @updatedAt @map("updated_at")
 
   ownerDepartment   Department                   @relation("TaskOwner", fields: [ownerDepartmentId], references: [id])
-  creator           User                         @relation("TaskCreator", fields: [createdBy], references: [id])
+  creator           User?                        @relation("TaskCreator", fields: [createdBy], references: [id], onDelete: SetNull)
   updater           User?                        @relation("TaskUpdater", fields: [updatedBy], references: [id])
   feedbacks         TaskFeedback[]
 
@@ -162,14 +196,14 @@ model Task {
 model TaskFeedback {
   id        String                @id @default(uuid())
   taskId    String                @map("task_id")
-  authorId  String                @map("author_id")
+  authorId  String?               @map("author_id")
   type      TaskFeedbackType
   decision  TaskFeedbackDecision?
   content   String
   createdAt DateTime              @default(now()) @map("created_at")
 
   task         Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  author       User               @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  author       User?              @relation(fields: [authorId], references: [id], onDelete: SetNull)
   readReceipts TaskFeedbackRead[]
 
   @@index([taskId, createdAt])

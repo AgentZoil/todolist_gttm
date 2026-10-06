@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -40,6 +41,15 @@ export class UsersController {
     return { data: await this.usersService.updateUser(id, body, user.id) };
   }
 
+  @Delete(':id')
+  @Roles('ADMIN')
+  async deleteUser(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return { data: await this.usersService.deleteUser(id, user.id) };
+  }
+
   @Get('registration-requests')
   @Roles('ADMIN')
   async findRegistrationRequests() {
@@ -75,6 +85,34 @@ export class UsersController {
         body.reason,
         user.id,
       ),
+    };
+  }
+
+  @Get('password-reset-requests')
+  @Roles('ADMIN')
+  async findPasswordResetRequests() {
+    return { data: await this.usersService.findPasswordResetRequests() };
+  }
+
+  @Patch('password-reset-requests/:id/approve')
+  @Roles('ADMIN')
+  async approvePasswordResetRequest(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return {
+      data: await this.usersService.approvePasswordResetRequest(id, user.id),
+    };
+  }
+
+  @Patch('password-reset-requests/:id/reject')
+  @Roles('ADMIN')
+  async rejectPasswordResetRequest(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserType,
+  ) {
+    return {
+      data: await this.usersService.rejectPasswordResetRequest(id, user.id),
     };
   }
 }

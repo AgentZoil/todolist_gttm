@@ -55,6 +55,11 @@ const ACTION_STYLE: Record<string, { badge: string; icon: React.ElementType; lab
     icon: Edit3,
     label: "Cập nhật tài khoản",
   },
+  DELETE_USER: {
+    badge: "bg-red-50 text-red-600 ring-red-200",
+    icon: Trash2,
+    label: "Xóa tài khoản",
+  },
   CREATE_DEPARTMENT: {
     badge: "bg-emerald-50 text-emerald-700 ring-emerald-200",
     icon: PlusCircle,

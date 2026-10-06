@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS departments (
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   auth_user_id TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE,
   full_name TEXT NOT NULL,
   role_id TEXT NOT NULL REFERENCES roles(id),
   department_id TEXT REFERENCES departments(id),
@@ -42,8 +43,8 @@ END $$;
 
 CREATE TABLE IF NOT EXISTS user_registration_requests (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  auth_user_id TEXT UNIQUE NOT NULL,
-  email TEXT NOT NULL,
+  auth_user_id TEXT UNIQUE,
+  email TEXT UNIQUE NOT NULL,
   full_name TEXT NOT NULL,
   status "RegistrationRequestStatus" NOT NULL DEFAULT 'PENDING',
   reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
@@ -55,8 +56,33 @@ CREATE TABLE IF NOT EXISTS user_registration_requests (
 
 CREATE INDEX IF NOT EXISTS idx_user_registration_requests_status_created_at
   ON user_registration_requests(status, created_at);
-CREATE INDEX IF NOT EXISTS idx_user_registration_requests_email
-  ON user_registration_requests(email);
+
+DO $$
+BEGIN
+  CREATE TYPE "PasswordResetRequestStatus" AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS user_password_reset_requests (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status "PasswordResetRequestStatus" NOT NULL DEFAULT 'PENDING',
+  reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_password_reset_requests_status_created_at
+  ON user_password_reset_requests(status, created_at);
+
+CREATE TABLE IF NOT EXISTS pending_auth_deletions (
+  auth_user_id TEXT PRIMARY KEY,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 DO $$
 BEGIN
@@ -121,7 +147,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   finalized_at TIMESTAMPTZ,
   finalized_by TEXT,
   version INTEGER NOT NULL DEFAULT 1,
-  created_by TEXT NOT NULL REFERENCES users(id),
+  created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
   updated_by TEXT REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -152,7 +178,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE TABLE IF NOT EXISTS task_feedbacks (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  author_id TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+  author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
   type "TaskFeedbackType" NOT NULL,
   decision "TaskFeedbackDecision",
   content TEXT NOT NULL,
@@ -197,6 +223,33 @@ CREATE TABLE IF NOT EXISTS period_locks (
 -- ============================================================
 
 -- 1. Add missing columns to tasks
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+UPDATE users AS app_user
+SET email = lower(auth_user.email)
+FROM auth.users AS auth_user
+WHERE auth_user.id::text = app_user.auth_user_id
+  AND app_user.email IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_key ON users(email);
+
+ALTER TABLE user_registration_requests ALTER COLUMN auth_user_id DROP NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS user_registration_requests_email_key
+  ON user_registration_requests(email);
+DROP INDEX IF EXISTS idx_user_registration_requests_email;
+
+-- Existing Auth users now use their stored email to create admin-reviewed reset requests.
+CREATE TABLE IF NOT EXISTS user_password_reset_requests (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id TEXT UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status "PasswordResetRequestStatus" NOT NULL DEFAULT 'PENDING',
+  reviewed_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_user_password_reset_requests_status_created_at
+  ON user_password_reset_requests(status, created_at);
+
+-- 1. Add missing columns to tasks
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS coordinating_units TEXT;
 ALTER TABLE tasks ADD COLUMN IF NOT EXISTS incomplete_reason TEXT;
@@ -221,3 +274,14 @@ ALTER TABLE tasks ADD CONSTRAINT tasks_updated_by_fkey
 -- 4. Backfill title for existing tasks that have NULL title
 -- (Set a default value based on task_code or content)
 UPDATE tasks SET title = content WHERE title IS NULL;
+
+-- Preserve tasks and feedback when a user profile is deleted.
+ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_created_by_fkey;
+ALTER TABLE tasks ALTER COLUMN created_by DROP NOT NULL;
+ALTER TABLE tasks ADD CONSTRAINT tasks_created_by_fkey
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE task_feedbacks DROP CONSTRAINT IF EXISTS task_feedbacks_author_id_fkey;
+ALTER TABLE task_feedbacks ALTER COLUMN author_id DROP NOT NULL;
+ALTER TABLE task_feedbacks ADD CONSTRAINT task_feedbacks_author_id_fkey
+  FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE;

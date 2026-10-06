@@ -19,7 +19,7 @@ async function main() {
     console.log(`${index + 1}. ${task.title}`);
     console.log(`   ID: ${task.id}`);
     console.log(`   Phòng ban: ${task.ownerDepartment.name}`);
-    console.log(`   Người tạo: ${task.creator.fullName}`);
+    console.log(`   Người tạo: ${task.creator?.fullName ?? 'Tài khoản đã xóa'}`);
     console.log(`   Ngày giao: ${task.assignedDate}`);
     console.log(`   Ngày YC hoàn thành: ${task.requiredCompletionDate || 'Không có'}`);
     console.log('');

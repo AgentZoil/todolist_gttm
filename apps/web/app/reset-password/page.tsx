@@ -97,8 +97,8 @@ export default function ResetPasswordPage() {
             </form>
           ) : (
             <div className="space-y-4 text-center">
-              <p className="text-sm text-muted-foreground">Mở liên kết đặt lại mật khẩu trong email. Nếu liên kết hết hạn, hãy yêu cầu liên kết mới.</p>
-              <Link href="/forgot-password" className="text-sm font-semibold text-primary hover:underline">Yêu cầu liên kết mới</Link>
+              <p className="text-sm text-muted-foreground">Mở liên kết đặt lại mật khẩu do quản trị viên gửi riêng. Nếu liên kết hết hạn, hãy gửi yêu cầu mới để quản trị viên xem xét.</p>
+              <Link href="/forgot-password" className="text-sm font-semibold text-primary hover:underline">Gửi yêu cầu đặt lại mật khẩu mới</Link>
             </div>
           )}
         </CardContent>

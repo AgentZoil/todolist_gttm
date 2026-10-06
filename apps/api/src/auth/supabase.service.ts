@@ -1,10 +1,9 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { randomBytes } from 'node:crypto';
 
 @Injectable()
 export class SupabaseService implements OnModuleInit {
-  private client: SupabaseClient;
+  private client: SupabaseClient<any, any, 'public', any, any>;
 
   onModuleInit() {
     const url = process.env.SUPABASE_URL;
@@ -23,18 +22,14 @@ export class SupabaseService implements OnModuleInit {
     });
   }
 
-  getClient(): SupabaseClient {
+  getClient(): SupabaseClient<any, any, 'public', any, any> {
     return this.client;
   }
 
-  private newUnclaimedPassword() {
-    return randomBytes(48).toString('base64url');
-  }
-
-  async createPendingUser(email: string, fullName: string) {
+  async createPendingUser(email: string, fullName: string, password: string) {
     const { data, error } = await this.client.auth.admin.createUser({
       email,
-      password: this.newUnclaimedPassword(),
+      password,
       email_confirm: false,
       user_metadata: { full_name: fullName },
       app_metadata: { registration_pending: true },
@@ -43,37 +38,81 @@ export class SupabaseService implements OnModuleInit {
     return data.user;
   }
 
-  async deleteUser(authUserId: string) {
-    const { error } = await this.client.auth.admin.deleteUser(authUserId);
-    if (error) throw error;
-  }
-
-  async activateUserAndSendPasswordSetup(
+  async updatePendingUser(
     authUserId: string,
     email: string,
     fullName: string,
-    redirectTo: string,
+    password: string,
   ) {
     const { data: current, error: getError } =
       await this.client.auth.admin.getUserById(authUserId);
     if (getError) throw getError;
+    if (
+      current.user.email?.toLowerCase() !== email ||
+      current.user.email_confirmed_at ||
+      current.user.app_metadata?.registration_pending !== true
+    ) {
+      throw new Error('Registration identity is not pending');
+    }
+
     const { data, error } = await this.client.auth.admin.updateUserById(
       authUserId,
       {
-        password: this.newUnclaimedPassword(),
+        password,
+        user_metadata: { full_name: fullName },
+      },
+    );
+    if (error) throw error;
+    return data.user;
+  }
+
+  async deleteUser(authUserId: string) {
+    const { error } = await this.client.auth.admin.deleteUser(authUserId);
+    if (
+      error &&
+      error.status !== 404 &&
+      error.code !== 'user_not_found'
+    ) {
+      throw error;
+    }
+  }
+
+  async approvePendingUser(
+    authUserId: string,
+    email: string,
+    fullName: string,
+  ) {
+    const { data: current, error: getError } =
+      await this.client.auth.admin.getUserById(authUserId);
+    if (getError) throw getError;
+    if (current.user.email?.toLowerCase() !== email) {
+      throw new Error('Registration email does not match Auth user');
+    }
+    const { data, error } = await this.client.auth.admin.updateUserById(
+      authUserId,
+      {
         email_confirm: true,
         user_metadata: { full_name: fullName },
-        app_metadata: { ...current.user.app_metadata, registration_pending: false },
+        app_metadata: {
+          ...current.user.app_metadata,
+          registration_pending: false,
+        },
       },
     );
     if (error) throw error;
 
-    const { error: resetError } = await this.client.auth.resetPasswordForEmail(
-      email,
-      { redirectTo },
-    );
-    if (resetError) throw resetError;
-
     return data.user;
+  }
+
+  async generatePasswordResetLink(email: string, redirectTo: string) {
+    const { data: linkData, error: linkError } =
+      await this.client.auth.admin.generateLink({
+        type: 'recovery',
+        email,
+        options: { redirectTo },
+      });
+    if (linkError) throw linkError;
+
+    return linkData.properties.action_link;
   }
 }

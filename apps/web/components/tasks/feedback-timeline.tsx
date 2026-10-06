@@ -7,7 +7,7 @@ export interface FeedbackTimelineItem {
   decision?: "APPROVED" | "NEEDS_REVISION";
   content: string;
   createdAt: string;
-  author: { id: string; fullName: string };
+  author: { id: string; fullName: string } | null;
 }
 
 interface FeedbackTimelineProps {
@@ -66,7 +66,7 @@ export function FeedbackTimeline({ feedbacks, currentUserId, canDelete, onDelete
           onDelete &&
           currentUserId &&
           canDelete?.(feedback) &&
-          feedback.author.id === currentUserId,
+          feedback.author?.id === currentUserId,
         );
 
         return (
@@ -77,7 +77,7 @@ export function FeedbackTimeline({ feedbacks, currentUserId, canDelete, onDelete
                 <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                   <span className={`text-xs font-semibold ${meta.labelTone}`}>{meta.label}</span>
                   <span className="text-xs text-muted-foreground">·</span>
-                  <span className="text-sm font-medium text-foreground">{feedback.author.fullName}</span>
+                  <span className="text-sm font-medium text-foreground">{feedback.author?.fullName || "Tài khoản đã xóa"}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="flex flex-col items-end text-[11px] leading-tight text-muted-foreground">

@@ -17,6 +17,8 @@ import {
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -26,11 +28,19 @@ export default function RegisterPage() {
     setLoading(true);
     setError(null);
 
+    if (password !== confirmPassword) {
+      setError("Hai mật khẩu không khớp.");
+      setLoading(false);
+      return;
+    }
+
     try {
       await apiFetch("/users/register", {
         method: "POST",
-        body: JSON.stringify({ email, fullName }),
+        body: JSON.stringify({ email, fullName, password, confirmPassword }),
       });
+      setPassword("");
+      setConfirmPassword("");
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể gửi yêu cầu đăng ký");
@@ -50,14 +60,14 @@ export default function RegisterPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-foreground">Tạo tài khoản</CardTitle>
           <CardDescription className="text-muted-foreground">
-            Gửi yêu cầu để Admin cấp quyền truy cập
+            Nhập email của bạn và tạo mật khẩu. Admin sẽ xác minh danh tính qua kênh tin cậy trước khi duyệt.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {success ? (
             <div className="space-y-4 text-center">
               <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                Đã gửi yêu cầu. Nếu được duyệt, liên kết tạo mật khẩu sẽ được gửi tới email này.
+                Đã gửi yêu cầu. Sau khi quản trị viên duyệt, bạn đăng nhập bằng mật khẩu vừa tạo. Hãy nhập email của mình; ứng dụng không xác minh email tự động.
               </p>
               <Link href="/login" className="text-sm font-semibold text-primary hover:underline">
                 Quay lại đăng nhập
@@ -73,9 +83,18 @@ export default function RegisterPage() {
                 <Label htmlFor="email">Email</Label>
                 <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Mật khẩu</Label>
+                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} maxLength={128} autoComplete="new-password" />
+                <p className="text-xs text-muted-foreground">Tối thiểu 12 ký tự. Ghi nhớ mật khẩu để đăng nhập sau khi được duyệt.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Nhập lại mật khẩu</Label>
+                <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required minLength={12} maxLength={128} autoComplete="new-password" />
+              </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? "Đang gửi yêu cầu..." : "Gửi yêu cầu đăng ký"}
+                {loading ? "Đang gửi yêu cầu..." : "Tạo yêu cầu đăng ký"}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 Đã có tài khoản?{" "}

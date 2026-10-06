@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, AlertTriangle, Check, UserRoundCheck, UserRoundX } from "lucide-react";
+import { Users, AlertTriangle, Check, Copy, RefreshCw, Trash2, UserRoundCheck, UserRoundX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Role {
@@ -33,9 +33,26 @@ interface RegistrationRequest {
   email: string;
   fullName: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  passwordReady: boolean;
   rejectionReason?: string | null;
   createdAt: string;
   reviewer?: { id: string; fullName: string } | null;
+}
+
+interface PasswordResetRequest {
+  id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  createdAt: string;
+  user: { fullName: string; email: string | null; isActive: boolean };
+}
+
+interface PendingActionBanner {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  destructive?: boolean;
+  requiresReason?: boolean;
+  onConfirm: (reason: string) => void;
 }
 
 const ROLE_BADGE: Record<string, string> = {
@@ -61,49 +78,99 @@ export default function UsersPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingActionBanner | null>(null);
+  const [actionReason, setActionReason] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [registrationRequests, setRegistrationRequests] = useState<RegistrationRequest[]>([]);
+  const [registrationRequestsLoading, setRegistrationRequestsLoading] = useState(true);
+  const [registrationRequestsError, setRegistrationRequestsError] = useState<string | null>(null);
+  const [passwordResetRequests, setPasswordResetRequests] = useState<PasswordResetRequest[]>([]);
+  const [passwordResetRequestsLoading, setPasswordResetRequestsLoading] = useState(true);
+  const [passwordResetRequestsError, setPasswordResetRequestsError] = useState<string | null>(null);
   const [approvalRoles, setApprovalRoles] = useState<Record<string, string>>({});
   const [approvalDepartments, setApprovalDepartments] = useState<Record<string, string>>({});
   const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  const [passwordResetLink, setPasswordResetLink] = useState<{ fullName: string; email: string; link: string } | null>(null);
+  const [passwordResetLinkCopied, setPasswordResetLinkCopied] = useState(false);
   const [userDrafts, setUserDrafts] = useState<Record<string, { roleId: string; departmentId: string }>>({});
   const [processingUser, setProcessingUser] = useState<string | null>(null);
 
+  const refreshRegistrationRequests = useCallback(async () => {
+    setRegistrationRequestsLoading(true);
+    setRegistrationRequestsError(null);
+    try {
+      const res = await apiFetch<{ data: RegistrationRequest[] }>("/users/registration-requests");
+      setRegistrationRequests(res.data);
+    } catch {
+      setRegistrationRequestsError("Chưa tải được yêu cầu đăng ký. Vui lòng thử làm mới lại.");
+    } finally {
+      setRegistrationRequestsLoading(false);
+    }
+  }, []);
+
+  const refreshPasswordResetRequests = useCallback(async () => {
+    setPasswordResetRequestsLoading(true);
+    setPasswordResetRequestsError(null);
+    try {
+      const res = await apiFetch<{ data: PasswordResetRequest[] }>('/users/password-reset-requests');
+      setPasswordResetRequests(res.data);
+    } catch {
+      setPasswordResetRequestsError('Chưa tải được yêu cầu đặt lại mật khẩu. Vui lòng thử làm mới lại.');
+    } finally {
+      setPasswordResetRequestsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    apiFetch<{ data: { role: string } }>("/auth/me")
+    apiFetch<{ data: { id: string; role: string } }>("/auth/me")
       .then((res) => {
+        setCurrentUserId(res.data.id);
         if (!["ADMIN", "SECRETARY"].includes(res.data.role)) {
           router.replace("/dashboard");
           return;
         }
         setIsAdmin(res.data.role === "ADMIN");
+        if (res.data.role === "ADMIN") {
+          void refreshRegistrationRequests();
+          void refreshPasswordResetRequests();
+        }
         return Promise.all([
           apiFetch<{ data: User[] }>("/users"),
           apiFetch<{ data: Role[] }>("/auth/roles"),
           apiFetch<{ data: Department[] }>("/departments"),
-          res.data.role === "ADMIN"
-            ? apiFetch<{ data: RegistrationRequest[] }>("/users/registration-requests")
-            : Promise.resolve({ data: [] as RegistrationRequest[] }),
         ]);
       })
       .then((result) => {
         if (!result) return;
-        const [usersRes, rolesRes, deptsRes, requestsRes] = result;
+        const [usersRes, rolesRes, deptsRes] = result;
         setUsers(usersRes.data);
         setRoles(rolesRes.data);
         setDepartments(deptsRes.data);
-        setRegistrationRequests(requestsRes.data);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [router, refreshPasswordResetRequests, refreshRegistrationRequests]);
 
-  const refreshRegistrationRequests = async () => {
-    const res = await apiFetch<{ data: RegistrationRequest[] }>("/users/registration-requests");
-    setRegistrationRequests(res.data);
-  };
+  useEffect(() => {
+    if (!isAdmin) return;
 
-  const approveRequest = async (request: RegistrationRequest) => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refreshRegistrationRequests();
+        void refreshPasswordResetRequests();
+      }
+    };
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [isAdmin, refreshPasswordResetRequests, refreshRegistrationRequests]);
+
+  const approveRequest = (request: RegistrationRequest) => {
     const roleId = approvalRoles[request.id];
     const role = roles.find((item) => item.id === roleId);
     if (!roleId) return;
@@ -111,29 +178,113 @@ export default function UsersPage() {
       setError("Cần chọn phòng ban cho tài khoản phòng ban");
       return;
     }
+    if (!request.passwordReady) {
+      setError("Yêu cầu cũ chưa có mật khẩu. Hãy từ chối yêu cầu này và nhờ người đăng ký gửi lại.");
+      return;
+    }
+    const departmentId = approvalDepartments[request.id] || undefined;
+    setPendingAction({
+      title: "Xác nhận duyệt tài khoản",
+      description: "Hãy chắc chắn bạn đã xác minh người đăng ký qua kênh tin cậy. Email chưa được xác minh tự động.",
+      confirmLabel: "Duyệt tài khoản",
+      onConfirm: () => void executeApproveRequest(request, roleId, departmentId),
+    });
+    setActionReason("");
+  };
 
+  const executeApproveRequest = async (request: RegistrationRequest, roleId: string, departmentId?: string) => {
     setProcessingRequest(request.id);
     try {
-      await apiFetch(`/users/registration-requests/${request.id}/approve`, {
+      await apiFetch<{ data: User }>(`/users/registration-requests/${request.id}/approve`, {
         method: "PATCH",
         body: JSON.stringify({
           roleId,
-          departmentId: approvalDepartments[request.id] || undefined,
+          departmentId,
         }),
       });
       await Promise.all([
         refreshRegistrationRequests(),
         apiFetch<{ data: User[] }>("/users").then((res) => setUsers(res.data)),
       ]);
-    } catch (err: any) {
-      setError("Lỗi duyệt yêu cầu: " + err.message);
+    } catch (err) {
+      setError("Lỗi duyệt yêu cầu: " + (err instanceof Error ? err.message : "Vui lòng thử lại."));
     } finally {
       setProcessingRequest(null);
     }
   };
 
-  const rejectRequest = async (request: RegistrationRequest) => {
-    const reason = window.prompt("Lý do từ chối (có thể bỏ trống):") ?? "";
+  const approvePasswordReset = (request: PasswordResetRequest) => {
+    if (!request.user.email) {
+      setError("Tài khoản thiếu email. Vui lòng báo quản trị viên kiểm tra.");
+      return;
+    }
+    setPendingAction({
+      title: "Xác nhận đặt lại mật khẩu",
+      description: "Chỉ duyệt sau khi đã xác minh đúng chủ tài khoản. Liên kết tạo ra cần được gửi riêng cho họ qua kênh tin cậy.",
+      confirmLabel: "Duyệt và tạo liên kết",
+      onConfirm: () => void executeApprovePasswordReset(request),
+    });
+    setActionReason("");
+  };
+
+  const executeApprovePasswordReset = async (request: PasswordResetRequest) => {
+    setProcessingRequest(request.id);
+    try {
+      const response = await apiFetch<{ data: { fullName: string; email: string; passwordResetLink: string } }>(`/users/password-reset-requests/${request.id}/approve`, {
+        method: "PATCH",
+      });
+      setPasswordResetLink({
+        fullName: response.data.fullName,
+        email: response.data.email,
+        link: response.data.passwordResetLink,
+      });
+      setPasswordResetLinkCopied(false);
+      await refreshPasswordResetRequests();
+    } catch (err) {
+      setError("Lỗi duyệt yêu cầu đặt lại mật khẩu: " + (err instanceof Error ? err.message : "Vui lòng thử lại."));
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const rejectPasswordReset = (request: PasswordResetRequest) => {
+    setPendingAction({
+      title: "Từ chối yêu cầu đặt lại mật khẩu?",
+      description: `Yêu cầu của ${request.user.fullName} sẽ bị từ chối.`,
+      confirmLabel: "Từ chối yêu cầu",
+      destructive: true,
+      onConfirm: () => void executeRejectPasswordReset(request),
+    });
+    setActionReason("");
+  };
+
+  const executeRejectPasswordReset = async (request: PasswordResetRequest) => {
+    setProcessingRequest(request.id);
+    try {
+      await apiFetch(`/users/password-reset-requests/${request.id}/reject`, {
+        method: "PATCH",
+      });
+      await refreshPasswordResetRequests();
+    } catch (err) {
+      setError("Lỗi từ chối yêu cầu đặt lại mật khẩu: " + (err instanceof Error ? err.message : "Vui lòng thử lại."));
+    } finally {
+      setProcessingRequest(null);
+    }
+  };
+
+  const rejectRequest = (request: RegistrationRequest) => {
+    setActionReason("");
+    setPendingAction({
+      title: "Từ chối yêu cầu đăng ký?",
+      description: `Yêu cầu của ${request.fullName} sẽ bị từ chối. Có thể ghi lý do để người đăng ký biết cần làm gì tiếp theo.`,
+      confirmLabel: "Từ chối yêu cầu",
+      destructive: true,
+      requiresReason: true,
+      onConfirm: (reason) => void executeRejectRequest(request, reason),
+    });
+  };
+
+  const executeRejectRequest = async (request: RegistrationRequest, reason: string) => {
     setProcessingRequest(request.id);
     try {
       await apiFetch(`/users/registration-requests/${request.id}/reject`, {
@@ -141,14 +292,14 @@ export default function UsersPage() {
         body: JSON.stringify({ reason }),
       });
       await refreshRegistrationRequests();
-    } catch (err: any) {
-      setError("Lỗi từ chối yêu cầu: " + err.message);
+    } catch (err) {
+      setError("Lỗi từ chối yêu cầu: " + (err instanceof Error ? err.message : "Vui lòng thử lại."));
     } finally {
       setProcessingRequest(null);
     }
   };
 
-  const updateUser = async (user: User, changes: { roleId?: string; departmentId?: string | null; isActive?: boolean }) => {
+  const updateUser = async (user: User, changes: { roleId?: string; departmentId?: string | null }) => {
     setProcessingUser(user.id);
     setError(null);
     try {
@@ -169,6 +320,44 @@ export default function UsersPage() {
     }
   };
 
+  const deleteUserAccount = (user: User) => {
+    setPendingAction({
+      title: `Xóa tài khoản ${user.fullName}?`,
+      description: "Tài khoản sẽ bị xóa hẳn và không thể khôi phục. Nếu còn nhiệm vụ, phản hồi hoặc kỳ khóa liên quan, hệ thống sẽ giữ tài khoản lại.",
+      confirmLabel: "Xóa tài khoản",
+      destructive: true,
+      onConfirm: () => void executeDeleteUserAccount(user),
+    });
+    setActionReason("");
+  };
+
+  const executeDeleteUserAccount = async (user: User) => {
+    setProcessingUser(user.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await apiFetch<{ data: { id: string; fullName: string; authCleanupPending: boolean } }>(`/users/${user.id}`, {
+        method: "DELETE",
+      });
+      setUsers((current) => current.filter((item) => item.id !== user.id));
+      setUserDrafts((current) => {
+        const next = { ...current };
+        delete next[user.id];
+        return next;
+      });
+      setNotice(response.data.authCleanupPending
+        ? `Đã xóa hồ sơ ${response.data.fullName}. Hệ thống đang tự hoàn tất xóa thông tin đăng nhập.`
+        : `Đã xóa tài khoản ${response.data.fullName}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể xóa tài khoản");
+      await apiFetch<{ data: User[] }>("/users")
+        .then((response) => setUsers(response.data))
+        .catch(() => undefined);
+    } finally {
+      setProcessingUser(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -180,14 +369,112 @@ export default function UsersPage() {
     );
   }
 
+  const pendingRequests = registrationRequests.filter((request) => request.status === "PENDING");
+  const pendingPasswordResetRequests = passwordResetRequests.filter((request) => request.status === "PENDING");
+
   return (
     <div className="space-y-6">
+      {pendingAction && (
+        <section
+          aria-label="Xác nhận thao tác"
+          className="fixed left-1/2 top-4 z-[110] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 rounded-2xl border border-amber-200 bg-white shadow-xl ring-1 ring-black/5"
+        >
+          <div className="flex gap-3 p-4 sm:p-5">
+            <div className={cn(
+              "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+              pendingAction.destructive ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600",
+            )}>
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-foreground">{pendingAction.title}</h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{pendingAction.description}</p>
+              {pendingAction.requiresReason && (
+                <label className="mt-3 block text-sm font-medium text-foreground">
+                  Lý do từ chối <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
+                  <textarea
+                    value={actionReason}
+                    onChange={(event) => setActionReason(event.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    placeholder="Nhập lý do để người đăng ký biết cần làm gì tiếp theo..."
+                    className="mt-1.5 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm font-normal outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  />
+                </label>
+              )}
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setPendingAction(null); setActionReason(""); }}
+                >
+                  Hủy
+                </Button>
+                <Button
+                  type="button"
+                  variant={pendingAction.destructive ? "destructive" : "default"}
+                  onClick={() => {
+                    const action = pendingAction;
+                    setPendingAction(null);
+                    setActionReason("");
+                    setError(null);
+                    action.onConfirm(actionReason.trim());
+                  }}
+                >
+                  {pendingAction.confirmLabel}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
       {error && (
-        <Card className="border-destructive/30">
-          <CardContent className="flex items-center gap-3 py-4">
-            <AlertTriangle className="h-5 w-5 text-destructive" />
-            <p className="flex-1 text-sm text-destructive">{error}</p>
-            <Button variant="outline" size="sm" onClick={() => setError(null)}>Đóng</Button>
+        <div
+          role="alert"
+          aria-live="assertive"
+          className={cn(
+            "fixed left-1/2 z-[100] flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-red-800 shadow-lg",
+            pendingAction ? "top-36" : "top-4",
+          )}
+        >
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-600" />
+          <p className="flex-1 text-sm">{error}</p>
+          <Button variant="outline" size="sm" onClick={() => setError(null)}>Đóng</Button>
+        </div>
+      )}
+      {notice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed left-1/2 top-4 z-[100] flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800 shadow-lg"
+        >
+          <Check className="h-5 w-5 shrink-0 text-emerald-600" />
+          <p className="flex-1 text-sm">{notice}</p>
+          <Button variant="outline" size="sm" onClick={() => setNotice(null)}>Đóng</Button>
+        </div>
+      )}
+      {passwordResetLink && (
+        <Card className="border-emerald-200">
+          <CardContent className="space-y-3 py-4">
+            <div>
+              <h2 className="font-semibold text-foreground">Đã duyệt đặt lại mật khẩu cho {passwordResetLink.fullName} ({passwordResetLink.email})</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Không gửi email. Gửi riêng liên kết cho đúng người qua kênh tin cậy; ai có liên kết đều có thể đặt mật khẩu.
+              </p>
+            </div>
+            <p className="max-h-24 select-all overflow-y-auto break-all rounded-lg bg-muted p-3 font-mono text-xs">{passwordResetLink.link}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={() => {
+                void navigator.clipboard.writeText(passwordResetLink.link)
+                  .then(() => setPasswordResetLinkCopied(true))
+                  .catch(() => setError("Không sao chép được liên kết. Hãy chọn liên kết rồi sao chép thủ công."));
+              }}>
+                {passwordResetLinkCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {passwordResetLinkCopied ? "Đã sao chép" : "Sao chép liên kết"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPasswordResetLink(null)}>Ẩn liên kết</Button>
+              <span className="text-xs text-muted-foreground">Liên kết có hạn và chỉ dùng một lần.</span>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -202,23 +489,36 @@ export default function UsersPage() {
 
       {isAdmin && (
         <Card>
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div>
               <h2 className="flex items-center gap-2 font-semibold">
                 <UserRoundCheck className="h-4 w-4 text-primary" />
                 Yêu cầu đăng ký chờ duyệt
               </h2>
-              <p className="mt-1 text-xs text-muted-foreground">Sau khi duyệt, liên kết tạo mật khẩu gửi tới email đăng ký; chỉ người mở được hộp thư mới kích hoạt được tài khoản.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Người đăng ký đã chọn mật khẩu. Email không được xác minh tự động; chỉ duyệt sau khi xác minh đúng người qua kênh tin cậy.</p>
             </div>
-            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-              {registrationRequests.filter((request) => request.status === "PENDING").length}
-            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => void refreshRegistrationRequests()} disabled={registrationRequestsLoading}>
+                <RefreshCw className={cn("h-4 w-4", registrationRequestsLoading && "animate-spin")} />
+                Làm mới
+              </Button>
+              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                {pendingRequests.length}
+              </span>
+            </div>
           </div>
-          {registrationRequests.filter((request) => request.status === "PENDING").length === 0 ? (
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">Không có yêu cầu chờ duyệt.</CardContent>
+          {registrationRequestsError && (
+            <CardContent className="pb-0 text-sm text-destructive" role="alert">{registrationRequestsError}</CardContent>
+          )}
+          {registrationRequestsLoading && pendingRequests.length === 0 ? (
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">Đang tải yêu cầu đăng ký...</CardContent>
+          ) : pendingRequests.length === 0 ? (
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Chưa có yêu cầu chờ duyệt. Nếu vừa đăng ký, hãy bấm “Làm mới”.
+            </CardContent>
           ) : (
             <div className="divide-y divide-border">
-              {registrationRequests.filter((request) => request.status === "PENDING").map((request) => {
+              {pendingRequests.map((request) => {
                 const selectedRoleId = approvalRoles[request.id] || "";
                 const selectedRole = roles.find((role) => role.id === selectedRoleId)?.name;
                 const busy = processingRequest === request.id;
@@ -226,7 +526,8 @@ export default function UsersPage() {
                   <div key={request.id} className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-foreground">{request.fullName}</p>
-                      <p className="text-sm text-muted-foreground">{request.email}</p>
+              <p className="text-sm text-muted-foreground">{request.email}</p>
+                      {!request.passwordReady && <p className="mt-1 text-xs text-amber-700">Yêu cầu cũ chưa có mật khẩu; cần đăng ký lại.</p>}
                       <p className="mt-1 text-xs text-muted-foreground">Gửi lúc {new Date(request.createdAt).toLocaleString("vi-VN")}</p>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -250,10 +551,65 @@ export default function UsersPage() {
                           {departments.filter((department) => department.isActive !== false).map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                         </select>
                       )}
-                      <Button size="sm" onClick={() => void approveRequest(request)} disabled={busy || !selectedRoleId}>
+                      <Button size="sm" onClick={() => void approveRequest(request)} disabled={busy || !selectedRoleId || !request.passwordReady}>
                         {busy ? "Đang xử lý..." : <><Check className="h-4 w-4" />Duyệt</>}
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => void rejectRequest(request)} disabled={busy}>
+                        <UserRoundX className="h-4 w-4" />Từ chối
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold">
+                <UserRoundCheck className="h-4 w-4 text-primary" />
+                Yêu cầu đặt lại mật khẩu
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">Ứng dụng không gửi email. Xác minh đúng chủ tài khoản qua kênh tin cậy; khi duyệt, hãy gửi riêng liên kết một lần để họ tự đặt mật khẩu.</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => void refreshPasswordResetRequests()} disabled={passwordResetRequestsLoading}>
+                <RefreshCw className={cn("h-4 w-4", passwordResetRequestsLoading && "animate-spin")} />
+                Làm mới
+              </Button>
+              <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                {pendingPasswordResetRequests.length}
+              </span>
+            </div>
+          </div>
+          {passwordResetRequestsError && (
+            <CardContent className="pb-0 text-sm text-destructive" role="alert">{passwordResetRequestsError}</CardContent>
+          )}
+          {passwordResetRequestsLoading && pendingPasswordResetRequests.length === 0 ? (
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">Đang tải yêu cầu...</CardContent>
+          ) : pendingPasswordResetRequests.length === 0 ? (
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">Chưa có yêu cầu chờ duyệt.</CardContent>
+          ) : (
+            <div className="divide-y divide-border">
+              {pendingPasswordResetRequests.map((request) => {
+                const busy = processingRequest === request.id;
+                return (
+                  <div key={request.id} className="flex flex-col gap-3 px-4 py-4 lg:flex-row lg:items-center">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-foreground">{request.user.fullName}</p>
+                      <p className="text-sm text-muted-foreground">{request.user.email || "Tài khoản thiếu email"}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Gửi lúc {new Date(request.createdAt).toLocaleString("vi-VN")}</p>
+                      {!request.user.isActive && <p className="mt-1 text-xs text-destructive">Tài khoản đã ngừng hoạt động.</p>}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => void approvePasswordReset(request)} disabled={busy || !request.user.email || !request.user.isActive}>
+                        {busy ? "Đang xử lý..." : <><Check className="h-4 w-4" />Duyệt và tạo link</>}
+                      </Button>
+                      <Button size="sm" variant="destructive" onClick={() => void rejectPasswordReset(request)} disabled={busy}>
                         <UserRoundX className="h-4 w-4" />Từ chối
                       </Button>
                     </div>
@@ -304,6 +660,7 @@ export default function UsersPage() {
               ) : (
                 users.map((user, index) => {
                   const isEven = index % 2 === 0;
+                  const isCurrentUser = user.id === currentUserId;
                   const roleBadge =
                     ROLE_BADGE[user.role.name] || ROLE_BADGE.VIEWER;
                   const draft = userDrafts[user.id] || {
@@ -315,16 +672,25 @@ export default function UsersPage() {
                   return (
                     <tr
                       key={user.id}
+                      aria-current={isCurrentUser ? "true" : undefined}
                       className={cn(
                         "border-b border-border/50 transition-colors hover:bg-muted/30",
-                        isEven ? "bg-card" : "bg-muted/10"
+                        isCurrentUser ? "bg-primary/5" : isEven ? "bg-card" : "bg-muted/10"
                       )}
                     >
-                      <td className="px-4 py-3 text-center text-muted-foreground">
+                      <td className={cn("px-4 py-3 text-center text-muted-foreground", isCurrentUser && "border-l-4 border-primary")}>
                         {index + 1}
                       </td>
                       <td className="px-4 py-3">
-                        <span className="font-medium">{user.fullName}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{user.fullName}</span>
+                          {isCurrentUser && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                              <Check className="h-3 w-3" aria-hidden="true" />
+                              Đang đăng nhập
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         {isAdmin ? (
@@ -384,16 +750,13 @@ export default function UsersPage() {
                             </Button>
                             <Button
                               size="sm"
-                              variant={user.isActive ? "destructive" : "outline"}
-                              disabled={busy}
-                              onClick={() => {
-                                const action = user.isActive ? "vô hiệu hóa" : "kích hoạt lại";
-                                if (window.confirm(`Bạn có chắc muốn ${action} tài khoản ${user.fullName}?`)) {
-                                  void updateUser(user, { isActive: !user.isActive });
-                                }
-                              }}
+                              variant="destructive"
+                              disabled={busy || isCurrentUser}
+                              title={isCurrentUser ? "Không thể xóa tài khoản đang đăng nhập" : undefined}
+                              onClick={() => void deleteUserAccount(user)}
                             >
-                              {user.isActive ? "Vô hiệu hóa" : "Kích hoạt"}
+                              <Trash2 className="h-4 w-4" />
+                              {busy ? "Đang xử lý..." : "Xóa"}
                             </Button>
                           </div>
                         </td>
