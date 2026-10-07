@@ -14,26 +14,74 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+const PASSWORD_RECOVERY_SESSION_KEY = "gttm-password-recovery-session";
+const PASSWORD_RECOVERY_SESSION_TTL = 15 * 60 * 1000;
+
+function clearStoredRecoverySession() {
+  try {
+    sessionStorage.removeItem(PASSWORD_RECOVERY_SESSION_KEY);
+  } catch {
+    // Storage can be unavailable in restricted browser contexts.
+  }
+}
+
+function getStoredRecoveryUserId() {
+  try {
+    const stored = sessionStorage.getItem(PASSWORD_RECOVERY_SESSION_KEY);
+    if (!stored) return null;
+
+    const recovery = JSON.parse(stored) as { userId?: string; createdAt?: number };
+    const age = recovery.createdAt ? Date.now() - recovery.createdAt : -1;
+    if (
+      !recovery.userId ||
+      age < 0 ||
+      age > PASSWORD_RECOVERY_SESSION_TTL
+    ) {
+      clearStoredRecoverySession();
+      return null;
+    }
+
+    return recovery.userId;
+  } catch {
+    clearStoredRecoverySession();
+    return null;
+  }
+}
+
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveryUserId, setRecoveryUserId] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
+  const [signOutWarning, setSignOutWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
     let active = true;
-    const hasRecoveryMarker =
-      new URLSearchParams(window.location.hash.slice(1)).get("type") === "recovery" ||
-      new URLSearchParams(window.location.search).has("code");
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (active && data.session && hasRecoveryMarker) setRecoveryReady(true);
-    });
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (active && (event === "PASSWORD_RECOVERY" || (session && hasRecoveryMarker))) {
+      if (active && event === "PASSWORD_RECOVERY" && session?.user.id) {
+        try {
+          sessionStorage.setItem(
+            PASSWORD_RECOVERY_SESSION_KEY,
+            JSON.stringify({ userId: session.user.id, createdAt: Date.now() }),
+          );
+        } catch {
+          // The current recovery event still authorizes this page session.
+        }
+        setRecoveryUserId(session.user.id);
+        setRecoveryReady(true);
+        setError(null);
+      }
+    });
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active || !data.session?.user.id) return;
+      const storedUserId = getStoredRecoveryUserId();
+      if (storedUserId && storedUserId === data.session.user.id) {
+        setRecoveryUserId(storedUserId);
         setRecoveryReady(true);
       }
     });
@@ -51,14 +99,50 @@ export default function ResetPasswordPage() {
       setError("Hai mật khẩu không khớp.");
       return;
     }
+    const storedRecoveryUserId = getStoredRecoveryUserId();
+    if (
+      !recoveryReady ||
+      !recoveryUserId ||
+      (storedRecoveryUserId && storedRecoveryUserId !== recoveryUserId)
+    ) {
+      setError("Hãy mở liên kết đặt lại mật khẩu mới để tiếp tục.");
+      return;
+    }
+
     setLoading(true);
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session?.user.id !== recoveryUserId) {
+        clearStoredRecoverySession();
+        setRecoveryReady(false);
+        setRecoveryUserId(null);
+        setError("Phiên đặt lại mật khẩu đã hết hạn. Hãy yêu cầu liên kết mới.");
+        return;
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) {
         setError("Liên kết không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới.");
         return;
       }
-      await supabase.auth.signOut().catch(() => undefined);
+
+      clearStoredRecoverySession();
+      let signOutFailed = false;
+      try {
+        const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          const { error: localSignOutError } = await supabase.auth.signOut({ scope: "local" });
+          signOutFailed = Boolean(localSignOutError);
+        }
+      } catch {
+        try {
+          const { error: localSignOutError } = await supabase.auth.signOut({ scope: "local" });
+          signOutFailed = Boolean(localSignOutError);
+        } catch {
+          signOutFailed = true;
+        }
+      }
+      setSignOutWarning(signOutFailed);
       setComplete(true);
     } catch {
       setError("Liên kết không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới.");
@@ -77,18 +161,21 @@ export default function ResetPasswordPage() {
         <CardContent>
           {complete ? (
             <div className="space-y-4 text-center">
-              <p className="text-sm text-emerald-700">Đã cập nhật mật khẩu.</p>
+              <p className="text-sm text-emerald-700">Đã đổi mật khẩu. Hãy đăng nhập bằng mật khẩu mới.</p>
+              {signOutWarning && (
+                <p className="text-sm text-amber-700">Hãy đóng tab này và mở cửa sổ riêng để đăng nhập lại.</p>
+              )}
               <Link href="/login" className="text-sm font-semibold text-primary hover:underline">Đăng nhập</Link>
             </div>
           ) : recoveryReady ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="password">Mật khẩu mới</Label>
-                <Input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} autoComplete="new-password" />
+                <Input id="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} maxLength={128} autoComplete="new-password" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Nhập lại mật khẩu</Label>
-                <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={12} autoComplete="new-password" />
+                <Input id="confirmPassword" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} required minLength={12} maxLength={128} autoComplete="new-password" />
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={loading} className="w-full">
