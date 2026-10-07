@@ -104,15 +104,32 @@ export class SupabaseService implements OnModuleInit {
     return data.user;
   }
 
-  async generatePasswordResetLink(email: string, redirectTo: string) {
+  async generatePasswordResetLink(
+    email: string,
+    redirectTo: string,
+    authUserId: string,
+  ) {
     const { data: linkData, error: linkError } =
       await this.client.auth.admin.generateLink({
         type: 'recovery',
         email,
-        options: { redirectTo },
       });
     if (linkError) throw linkError;
 
-    return linkData.properties.action_link;
+    if (
+      linkData.user.id !== authUserId ||
+      !linkData.properties.hashed_token
+    ) {
+      throw new Error('Recovery link identity does not match application user');
+    }
+
+    const recoveryUrl = new URL(redirectTo);
+    recoveryUrl.hash = new URLSearchParams({
+      token_hash: linkData.properties.hashed_token,
+      type: 'recovery',
+      user_id: authUserId,
+    }).toString();
+
+    return recoveryUrl.toString();
   }
 }

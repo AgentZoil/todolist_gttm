@@ -939,6 +939,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
           passwordResetLink = await this.supabase.generatePasswordResetLink(
             request.user.email,
             redirectTo,
+            request.user.authUserId,
           );
         } catch {
           this.logger.error('Could not generate password reset link');

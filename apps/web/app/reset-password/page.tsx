@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -54,28 +54,112 @@ export default function ResetPasswordPage() {
   const [recoveryReady, setRecoveryReady] = useState(false);
   const [recoveryUserId, setRecoveryUserId] = useState<string | null>(null);
   const [complete, setComplete] = useState(false);
+  const [verifyingLink, setVerifyingLink] = useState(false);
   const [signOutWarning, setSignOutWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const recoveryAttemptRef = useRef<{
+    tokenHash: string | null;
+    recoveryType: string | null;
+    expectedUserId: string | null;
+  } | null>(null);
+  const recoveryVerificationRef = useRef<Promise<string | null> | null>(null);
   const supabase = createClient();
 
   useEffect(() => {
     let active = true;
+    let expectedRecoveryUserId: string | null = null;
+
+    function authorizeRecovery(userId: string) {
+      try {
+        sessionStorage.setItem(
+          PASSWORD_RECOVERY_SESSION_KEY,
+          JSON.stringify({ userId, createdAt: Date.now() }),
+        );
+      } catch {
+        // The current recovery event still authorizes this page session.
+      }
+      setRecoveryUserId(userId);
+      setRecoveryReady(true);
+      setError(null);
+    }
+
+    async function rejectRecoveryLink() {
+      clearStoredRecoverySession();
+      setRecoveryReady(false);
+      setRecoveryUserId(null);
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        // The recovery form remains locked even if local sign-out fails.
+      }
+      if (active) {
+        setVerifyingLink(false);
+        setError("Liên kết không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới.");
+      }
+    }
+
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (active && event === "PASSWORD_RECOVERY" && session?.user.id) {
-        try {
-          sessionStorage.setItem(
-            PASSWORD_RECOVERY_SESSION_KEY,
-            JSON.stringify({ userId: session.user.id, createdAt: Date.now() }),
-          );
-        } catch {
-          // The current recovery event still authorizes this page session.
-        }
-        setRecoveryUserId(session.user.id);
-        setRecoveryReady(true);
-        setError(null);
+      const userId = session?.user.id;
+      if (
+        active &&
+        event === "PASSWORD_RECOVERY" &&
+        userId &&
+        (!expectedRecoveryUserId || expectedRecoveryUserId === userId)
+      ) {
+        authorizeRecovery(userId);
       }
     });
+
+    if (!recoveryAttemptRef.current) {
+      const recoveryParams = new URLSearchParams(window.location.hash.slice(1));
+      const hasRecoveryParams = ["token_hash", "type", "user_id"].some((key) =>
+        recoveryParams.has(key),
+      );
+      if (hasRecoveryParams) {
+        recoveryAttemptRef.current = {
+          tokenHash: recoveryParams.get("token_hash"),
+          recoveryType: recoveryParams.get("type"),
+          expectedUserId: recoveryParams.get("user_id"),
+        };
+      }
+    }
+
+    const recoveryAttempt = recoveryAttemptRef.current;
+    if (recoveryAttempt) {
+      const { tokenHash, recoveryType, expectedUserId } = recoveryAttempt;
+      expectedRecoveryUserId = expectedUserId;
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}`,
+      );
+
+      if (!tokenHash || recoveryType !== "recovery" || !expectedUserId) {
+        setError("Liên kết không hợp lệ hoặc đã hết hạn. Hãy yêu cầu liên kết mới.");
+      } else {
+        setVerifyingLink(true);
+        if (!recoveryVerificationRef.current) {
+          recoveryVerificationRef.current = supabase.auth
+            .verifyOtp({ token_hash: tokenHash, type: "recovery" })
+            .then(({ data, error: verifyError }) =>
+              verifyError ? null : (data.user?.id ?? null),
+            )
+            .catch(() => null);
+        }
+
+        void recoveryVerificationRef.current.then((verifiedUserId) => {
+          if (!active) return;
+          if (verifiedUserId !== expectedUserId) {
+            void rejectRecoveryLink();
+            return;
+          }
+
+          authorizeRecovery(verifiedUserId);
+          setVerifyingLink(false);
+        });
+      }
+    }
 
     void supabase.auth.getSession().then(({ data }) => {
       if (!active || !data.session?.user.id) return;
@@ -184,7 +268,11 @@ export default function ResetPasswordPage() {
             </form>
           ) : (
             <div className="space-y-4 text-center">
-              <p className="text-sm text-muted-foreground">Mở liên kết đặt lại mật khẩu do quản trị viên gửi riêng. Nếu liên kết hết hạn, hãy gửi yêu cầu mới để quản trị viên xem xét.</p>
+              <p className={`text-sm ${error ? "text-destructive" : "text-muted-foreground"}`}>
+                {verifyingLink
+                  ? "Đang xác thực liên kết..."
+                  : error ?? "Mở liên kết đặt lại mật khẩu do quản trị viên gửi riêng. Nếu liên kết hết hạn, hãy gửi yêu cầu mới để quản trị viên xem xét."}
+              </p>
               <Link href="/forgot-password" className="text-sm font-semibold text-primary hover:underline">Gửi yêu cầu đặt lại mật khẩu mới</Link>
             </div>
           )}
