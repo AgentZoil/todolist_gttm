@@ -40,6 +40,9 @@ const APPROVAL_STATUS_LABELS: Record<string, string> = {
 const COMPLETION_FIELDS = ['actualCompletionDate', 'completionEvidence'];
 const REVISION_EDITABLE_FIELDS = new Set(COMPLETION_FIELDS);
 const DEPARTMENT_EDITOR_EDITABLE_FIELDS = new Set(COMPLETION_FIELDS);
+const MAX_COMPLETION_STATUS_SCAN = 10_000;
+const MAX_SEARCH_LENGTH = 200;
+const MAX_PAGE = 1_000;
 
 type TaskAccessUser = {
   role: string;
@@ -130,7 +133,7 @@ export class TasksService {
       sortOrder = 'asc',
     } = params;
 
-    const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+    const safePage = Number.isInteger(page) && page > 0 ? Math.min(page, MAX_PAGE) : 1;
     const safeLimit = Number.isInteger(limit) && limit > 0
       ? Math.min(limit, 100)
       : 20;
@@ -147,6 +150,9 @@ export class TasksService {
       ? sortBy
       : 'requiredCompletionDate';
     const safeSortOrder = sortOrder === 'desc' ? 'desc' : 'asc';
+    if (search && search.length > MAX_SEARCH_LENGTH) {
+      throw new BadRequestException('Từ khóa tìm kiếm quá dài');
+    }
     const completionStatuses = [
       'COMPLETED_EARLY',
       'COMPLETED_ON_TIME',
@@ -260,7 +266,13 @@ export class TasksService {
         where,
         select: taskSelect,
         orderBy: { [safeSortBy]: safeSortOrder },
+        take: MAX_COMPLETION_STATUS_SCAN + 1,
       });
+      if (allMatchingTasks.length > MAX_COMPLETION_STATUS_SCAN) {
+        throw new BadRequestException(
+          'Có quá nhiều nhiệm vụ phù hợp. Vui lòng lọc thêm phòng ban hoặc khoảng ngày.',
+        );
+      }
       const filteredTasks = allMatchingTasks.filter((task) => {
         if (!task.actualCompletionDate || !task.requiredCompletionDate) return false;
         const comparison = compareDateOnly(
@@ -328,7 +340,7 @@ export class TasksService {
     search?: string;
   } = {}) {
     const { page = 1, limit = 20, search } = params;
-    const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+    const safePage = Number.isInteger(page) && page > 0 ? Math.min(page, MAX_PAGE) : 1;
     const safeLimit = Number.isInteger(limit) && limit > 0
       ? Math.min(limit, 100)
       : 20;
@@ -336,6 +348,10 @@ export class TasksService {
       approvalStatus: 'PENDING',
       isCancelled: false,
     };
+
+    if (search && search.length > MAX_SEARCH_LENGTH) {
+      throw new BadRequestException('Từ khóa tìm kiếm quá dài');
+    }
 
     if (search) {
       where.OR = [
@@ -393,7 +409,16 @@ export class TasksService {
     };
   }
 
-  async findDepartmentAttention(departmentId: string, userId: string) {
+  async findDepartmentAttention(
+    departmentId: string,
+    userId: string,
+    page = 1,
+    limit = 50,
+  ) {
+    const safePage = Number.isInteger(page) && page > 0 ? Math.min(page, MAX_PAGE) : 1;
+    const safeLimit = Number.isInteger(limit) && limit > 0
+      ? Math.min(limit, 100)
+      : 50;
     const where: any = {
       ownerDepartmentId: departmentId,
       isCancelled: false,
@@ -411,41 +436,56 @@ export class TasksService {
       ],
     };
 
-    const tasks = await this.prisma.task.findMany({
-      where,
-      select: {
-        id: true,
-        taskCode: true,
-        title: true,
-        requiredCompletionDate: true,
-        actualCompletionDate: true,
-        approvalStatus: true,
-        updatedAt: true,
-        ownerDepartment: {
-          select: { id: true, code: true, name: true },
-        },
-        feedbacks: {
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            type: true,
-            decision: true,
-            content: true,
-            createdAt: true,
-            author: { select: { id: true, fullName: true } },
+    const [tasks, total] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        select: {
+          id: true,
+          taskCode: true,
+          title: true,
+          requiredCompletionDate: true,
+          actualCompletionDate: true,
+          approvalStatus: true,
+          updatedAt: true,
+          ownerDepartment: {
+            select: { id: true, code: true, name: true },
+          },
+          feedbacks: {
+            where: {
+              OR: [
+                {
+                  type: 'DIRECTIVE',
+                  readReceipts: { none: { userId } },
+                },
+                { type: 'REVIEW', decision: 'NEEDS_REVISION' },
+              ],
+            },
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            select: {
+              id: true,
+              type: true,
+              decision: true,
+              content: true,
+              createdAt: true,
+              author: { select: { id: true, fullName: true } },
+            },
           },
         },
-      },
-      orderBy: { updatedAt: 'desc' },
-    });
+        orderBy: { updatedAt: 'desc' },
+        skip: (safePage - 1) * safeLimit,
+        take: safeLimit,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
 
     return {
       data: tasks.map((task) => this.enrichTask(task)),
       pagination: {
-        page: 1,
-        limit: tasks.length,
-        total: tasks.length,
-        totalPages: tasks.length > 0 ? 1 : 0,
+        page: safePage,
+        limit: safeLimit,
+        total,
+        totalPages: Math.ceil(total / safeLimit),
       },
     };
   }
@@ -471,6 +511,7 @@ export class TasksService {
         readReceipts: { none: { userId } },
       },
       select: { id: true },
+      take: 1_000,
     });
 
     if (unreadDirectives.length > 0) {
@@ -530,7 +571,8 @@ export class TasksService {
           select: { id: true, fullName: true },
         },
         feedbacks: {
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
           select: {
             id: true,
             type: true,
@@ -542,6 +584,7 @@ export class TasksService {
         },
       },
     });
+    if (task) task.feedbacks.reverse();
     if (
       task &&
       currentUser &&
@@ -1250,10 +1293,15 @@ export class TasksService {
       if (current.version !== task.version) {
         throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
       }
-      const feedbacks = await tx.taskFeedback.findMany({
-        where: { taskId: id },
-        include: { readReceipts: true },
-      });
+      const feedbackWhere = { taskId: id };
+      const [feedbacks, feedbackCount] = await Promise.all([
+        tx.taskFeedback.findMany({
+          where: feedbackWhere,
+          orderBy: { createdAt: 'desc' },
+          take: 500,
+        }),
+        tx.taskFeedback.count({ where: feedbackWhere }),
+      ]);
       const deleted = await tx.task.deleteMany({ where: { id, version: current.version } });
       if (deleted.count !== 1) {
         throw new ConflictException('Nhiệm vụ đã bị thay đổi. Vui lòng tải lại trang.');
@@ -1265,7 +1313,12 @@ export class TasksService {
           entityType: 'TASK',
           entityId: id,
           fieldName: 'snapshot',
-          oldValue: JSON.stringify({ task: current, feedbacks }),
+          oldValue: JSON.stringify({
+            task: current,
+            feedbacks,
+            feedbackCount,
+            feedbacksTruncated: feedbackCount > feedbacks.length,
+          }),
           newValue: null,
         },
       });

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ChevronRight, Inbox, Loader2, MessageSquare, RefreshCw } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Inbox, Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 
@@ -32,15 +32,20 @@ function getLatestAttentionFeedback(task: AttentionTask) {
 export default function InboxPage() {
   const router = useRouter();
   const [tasks, setTasks] = useState<AttentionTask[]>([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadTasks = async () => {
+  const loadTasks = async (page = 1) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch<{ data: AttentionTask[] }>("/tasks/attention");
+      const res = await apiFetch<{
+        data: AttentionTask[];
+        pagination: { page: number; limit: number; total: number; totalPages: number };
+      }>(`/tasks/attention?page=${page}&limit=50`);
       setTasks(res.data);
+      setPagination(res.pagination);
     } catch (err: any) {
       setError(err.message || "Không thể tải hộp công việc");
     } finally {
@@ -87,7 +92,7 @@ export default function InboxPage() {
             </div>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={loadTasks} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => loadTasks(pagination.page)} disabled={loading}>
           <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
           Làm mới
         </Button>
@@ -118,7 +123,7 @@ export default function InboxPage() {
               <p className="mt-0.5 text-xs text-muted-foreground">Phản hồi mới từ Lãnh đạo/Thư ký</p>
             </div>
             <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary">
-              {tasks.length}
+              {pagination.total}
             </span>
           </div>
           <div className="divide-y divide-border">
@@ -160,6 +165,33 @@ export default function InboxPage() {
               );
             })}
           </div>
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-border px-4 py-3 sm:px-5">
+              <span className="text-xs text-muted-foreground">
+                Trang {pagination.page}/{pagination.totalPages} · {pagination.total} nhiệm vụ
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || pagination.page <= 1}
+                  onClick={() => loadTasks(pagination.page - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Trước
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={loading || pagination.page >= pagination.totalPages}
+                  onClick={() => loadTasks(pagination.page + 1)}
+                >
+                  Sau
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

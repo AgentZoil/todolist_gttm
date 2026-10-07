@@ -46,7 +46,7 @@ ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 PORT=3001
 ```
 
-Thêm `${FRONTEND_URL}/reset-password` vào Supabase Auth Redirect URLs. Khi deploy, dùng URL web production.
+Hệ thống không xác minh email tự động. Admin cần xác minh người đăng ký qua kênh tin cậy trước khi duyệt. Yêu cầu đặt lại mật khẩu cũng do admin xử lý.
 
 ### Frontend (apps/web/.env)
 
@@ -83,12 +83,14 @@ npx prisma migrate status
 
 DB hiện hữu đã được baseline các migration cũ. Chạy `prisma migrate deploy` trước release; không chạy `prisma migrate reset` trên DB thật.
 
-### 4. Seed the Database
+### 4. Seed dữ liệu phát triển (tùy chọn)
 
 ```bash
 cd apps/api
 npx ts-node prisma/seed.ts
 ```
+
+Seed chỉ tạo role và hồ sơ admin giả để phát triển; không tạo tài khoản đăng nhập và bị chặn khi `NODE_ENV=production`. Không chạy seed trên database production.
 
 ### 5. Start Development Servers
 
@@ -107,16 +109,17 @@ npm run dev
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:3001/api
 
-### 7. Test Accounts
+### 7. Production release
 
-| Account | Email | Password | Role |
-|---------|-------|----------|------|
-| Admin | admin@gttm.vn | admin123 | ADMIN |
-| Editor 01 | editor01@gttm.vn | editor123 | DEPARTMENT_EDITOR |
-| Editor 02 | editor02@gttm.vn | editor123 | DEPARTMENT_EDITOR |
-| Secretary | secretary@gttm.vn | secretary123 | SECRETARY |
-| Leader Test | leader-test@gttm.vn | leader123 | LEADER |
-| Viewer | viewer@gttm.vn | viewer123 | VIEWER |
+Trước khi deploy, chạy migration trên đúng database production:
+
+```bash
+cd apps/api
+npx prisma migrate deploy
+npx prisma migrate status
+```
+
+Render đang dùng gói Free nên không hỗ trợ lệnh pre-deploy tự động; cần chạy migration thủ công trước khi push bản phát hành. Không chạy `prisma migrate reset` trên dữ liệu thật.
 
 ## Docker Deployment
 

@@ -3,6 +3,10 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Development seed is disabled in production.');
+  }
+
   // Create 5 roles
   const roles = await Promise.all([
     prisma.role.upsert({

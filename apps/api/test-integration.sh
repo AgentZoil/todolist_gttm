@@ -3,13 +3,20 @@
 # Integration Test Script - Permission Matrix
 # Tests all major features with different user roles
 
-API_URL="http://localhost:3001/api"
-ADMIN_EMAIL="admin@gttm.vn"
-ADMIN_PASS="admin123"
-EDITOR01_EMAIL="editor01@gttm.vn"
-EDITOR01_PASS="editor123"
-EDITOR02_EMAIL="editor02@gttm.vn"
-EDITOR02_PASS="editor123"
+API_URL="${API_URL:-http://localhost:3001/api}"
+: "${SUPABASE_URL:?Set SUPABASE_URL for the test project}"
+: "${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY for the test project}"
+: "${ADMIN_EMAIL:?Set ADMIN_EMAIL for the test project}"
+: "${ADMIN_PASS:?Set ADMIN_PASS for the test project}"
+: "${EDITOR01_EMAIL:?Set EDITOR01_EMAIL for the test project}"
+: "${EDITOR01_PASS:?Set EDITOR01_PASS for the test project}"
+: "${EDITOR02_EMAIL:?Set EDITOR02_EMAIL for the test project}"
+: "${EDITOR02_PASS:?Set EDITOR02_PASS for the test project}"
+
+if [ "${ALLOW_DESTRUCTIVE_INTEGRATION_TESTS:-}" != "1" ]; then
+  echo "Set ALLOW_DESTRUCTIVE_INTEGRATION_TESTS=1 to run; this script creates and changes tasks."
+  exit 1
+fi
 
 echo "=== Integration Test Suite ==="
 echo ""
@@ -18,8 +25,8 @@ echo ""
 get_token() {
   local email=$1
   local pass=$2
-  curl -s -X POST "https://knoauqlonevttuzjzspj.supabase.co/auth/v1/token?grant_type=password" \
-    -H "apikey: sb_publishable_eXHGP11GPkJ0mYQFBoF_aA_XVtgs_qm" \
+  curl -s -X POST "${SUPABASE_URL%/}/auth/v1/token?grant_type=password" \
+    -H "apikey: $SUPABASE_PUBLISHABLE_KEY" \
     -H "Content-Type: application/json" \
     -d "{\"email\":\"$email\",\"password\":\"$pass\"}" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))"
 }

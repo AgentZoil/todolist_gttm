@@ -11,6 +11,8 @@ interface CacheEntry<T> {
   expires: number;
 }
 
+const MAX_DASHBOARD_TASKS = 10_000;
+
 @Injectable()
 export class DashboardService {
   private cache = new Map<string, CacheEntry<any>>();
@@ -92,7 +94,13 @@ export class DashboardService {
         actualCompletionDate: true,
         approvedStatus: true,
       },
+      take: MAX_DASHBOARD_TASKS + 1,
     });
+    if (tasks.length > MAX_DASHBOARD_TASKS) {
+      throw new BadRequestException(
+        'Tháng này có quá nhiều nhiệm vụ để tải cùng lúc. Vui lòng báo quản trị viên.',
+      );
+    }
 
     const enrichedTasks = tasks.map((task) => {
       const status = this.getOfficialStatus(task);
@@ -146,6 +154,7 @@ export class DashboardService {
     const departments = await this.prisma.department.findMany({
       where: { isActive: true },
       select: { id: true, code: true, name: true },
+      take: 500,
     });
 
     const allTasks = await this.prisma.task.findMany({
@@ -174,7 +183,13 @@ export class DashboardService {
         actualCompletionDate: true,
         approvedStatus: true,
       },
+      take: MAX_DASHBOARD_TASKS + 1,
     });
+    if (allTasks.length > MAX_DASHBOARD_TASKS) {
+      throw new BadRequestException(
+        'Tháng này có quá nhiều nhiệm vụ để tải cùng lúc. Vui lòng báo quản trị viên.',
+      );
+    }
 
     const deptTaskMap = new Map<string, typeof allTasks>();
     for (const task of allTasks) {

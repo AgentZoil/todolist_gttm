@@ -6,7 +6,7 @@ export class AuditLogService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(page = 1, limit = 50) {
-    const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+    const safePage = Number.isInteger(page) && page > 0 ? Math.min(page, 1_000) : 1;
     const safeLimit = Number.isInteger(limit) && limit > 0
       ? Math.min(limit, 100)
       : 50;

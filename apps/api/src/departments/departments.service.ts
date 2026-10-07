@@ -8,6 +8,7 @@ export class DepartmentsService {
   async findAll() {
     return this.prisma.department.findMany({
       orderBy: { code: 'asc' },
+      take: 500,
     });
   }
 

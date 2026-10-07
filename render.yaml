@@ -5,7 +5,7 @@ services:
     plan: free
     dockerfilePath: ./apps/api/Dockerfile
     dockerContext: .
-    healthCheckPath: /api/auth/status
+    healthCheckPath: /api/auth/ready
     envVars:
       - key: PORT
         value: "3001"

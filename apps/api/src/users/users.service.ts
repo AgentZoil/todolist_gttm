@@ -181,6 +181,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
         department: { select: { id: true, code: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
+      take: 500,
     });
   }
 
@@ -326,13 +327,39 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
             tx.periodLock.count({ where: { lockedBy: id } }),
           ]);
 
-        await tx.userRegistrationRequest.deleteMany({
+        const registrationRequestWhere = {
+          OR: [
+            { authUserId: user.authUserId },
+            ...(user.email
+              ? [{ email: { equals: user.email, mode: 'insensitive' as const } }]
+              : []),
+          ],
+        };
+        const registrationRequests = await tx.userRegistrationRequest.findMany({
+          where: registrationRequestWhere,
+          select: { authUserId: true },
+          take: 10,
+        });
+        const linkedAuthUserIds = Array.from(new Set([
+          user.authUserId,
+          ...registrationRequests
+            .map((request) => request.authUserId)
+            .filter((authUserId): authUserId is string => Boolean(authUserId)),
+        ]));
+        const otherAuthUsers = await tx.user.findMany({
           where: {
-            OR: [
-              { authUserId: user.authUserId },
-              ...(user.email ? [{ email: user.email }] : []),
-            ],
+            authUserId: { in: linkedAuthUserIds.filter((authUserId) => authUserId !== user.authUserId) },
           },
+          select: { authUserId: true },
+        });
+        const authUserIdsToDelete = linkedAuthUserIds.filter(
+          (authUserId) =>
+            authUserId === user.authUserId ||
+            !otherAuthUsers.some((otherUser) => otherUser.authUserId === authUserId),
+        );
+
+        await tx.userRegistrationRequest.deleteMany({
+          where: registrationRequestWhere,
         });
 
         await tx.auditLog.create({
@@ -349,6 +376,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
                 tasks: relatedTasks,
                 feedbacks: authoredFeedbacks,
                 periodLocks: lockedPeriods,
+                registrationRequests: registrationRequests.length,
               },
               fullName: user.fullName,
               role: user.role.name,
@@ -357,23 +385,28 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
           },
         });
 
-        await tx.pendingAuthDeletion.upsert({
-          where: { authUserId: user.authUserId },
-          update: {},
-          create: { authUserId: user.authUserId },
+        await tx.pendingAuthDeletion.createMany({
+          data: authUserIdsToDelete.map((authUserId) => ({ authUserId })),
+          skipDuplicates: true,
         });
 
         await tx.user.delete({ where: { id } });
         return {
           id: user.id,
           authUserId: user.authUserId,
+          authUserIdsToDelete,
           fullName: user.fullName,
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
 
-    const authCleanupPending = !(await this.tryAuthDeletion(deletedUser.authUserId));
+    const cleanupResults = await Promise.all(
+      deletedUser.authUserIdsToDelete.map((authUserId) =>
+        this.tryAuthDeletion(authUserId),
+      ),
+    );
+    const authCleanupPending = cleanupResults.some((succeeded) => !succeeded);
     return { id: deletedUser.id, fullName: deletedUser.fullName, authCleanupPending };
   }
 
@@ -596,6 +629,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
         reviewer: { select: { id: true, fullName: true } },
       },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      take: 500,
     });
     return requests.map(({ authUserId, ...request }) => ({
       ...request,
@@ -785,16 +819,17 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
 
   async requestPasswordReset(emailInput: string) {
     const email = emailInput.trim().toLowerCase();
-    const acceptedResponse = {
-      accepted: true,
-      message:
-        'Nếu email thuộc tài khoản đang hoạt động, yêu cầu sẽ được quản trị viên xem xét.',
-    };
     const user = await this.prisma.user.findFirst({
       where: { email, isActive: true },
       select: { id: true },
     });
-    if (!user) return acceptedResponse;
+    if (!user) {
+      return {
+        accepted: false,
+        message:
+          'Email chưa có tài khoản hoạt động. Hãy kiểm tra lại hoặc liên hệ quản trị viên.',
+      };
+    }
 
     try {
       await this.prisma.$transaction(
@@ -846,7 +881,11 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
       if (code !== 'P2002' && code !== 'P2034') throw error;
     }
 
-    return acceptedResponse;
+    return {
+      accepted: true,
+      message:
+        'Yêu cầu đã được gửi tới quản trị viên xem xét. Ứng dụng không gửi email.',
+    };
   }
 
   async findPasswordResetRequests() {
@@ -856,6 +895,7 @@ export class UsersService implements OnModuleInit, OnModuleDestroy {
         reviewer: { select: { id: true, fullName: true } },
       },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      take: 500,
     });
   }
 

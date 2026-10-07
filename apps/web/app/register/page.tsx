@@ -43,7 +43,7 @@ export default function RegisterPage() {
       setConfirmPassword("");
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không thể gửi yêu cầu đăng ký");
+      setError(err instanceof Error ? err.message : "Không gửi được. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -60,14 +60,14 @@ export default function RegisterPage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-foreground">Tạo tài khoản</CardTitle>
           <CardDescription className="text-muted-foreground">
-            Nhập email của bạn và tạo mật khẩu. Admin sẽ xác minh danh tính qua kênh tin cậy trước khi duyệt.
+            Dùng email của bạn. Tài khoản cần quản trị viên duyệt.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {success ? (
             <div className="space-y-4 text-center">
               <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-                Đã gửi yêu cầu. Sau khi quản trị viên duyệt, bạn đăng nhập bằng mật khẩu vừa tạo. Hãy nhập email của mình; ứng dụng không xác minh email tự động.
+                Đã gửi yêu cầu. Đăng nhập bằng mật khẩu đã tạo sau khi được duyệt.
               </p>
               <Link href="/login" className="text-sm font-semibold text-primary hover:underline">
                 Quay lại đăng nhập
@@ -86,7 +86,7 @@ export default function RegisterPage() {
               <div className="space-y-2">
                 <Label htmlFor="password">Mật khẩu</Label>
                 <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={12} maxLength={128} autoComplete="new-password" />
-                <p className="text-xs text-muted-foreground">Tối thiểu 12 ký tự. Ghi nhớ mật khẩu để đăng nhập sau khi được duyệt.</p>
+                <p className="text-xs text-muted-foreground">Ít nhất 12 ký tự.</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Nhập lại mật khẩu</Label>
@@ -94,7 +94,7 @@ export default function RegisterPage() {
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? "Đang gửi yêu cầu..." : "Tạo yêu cầu đăng ký"}
+                {loading ? "Đang gửi..." : "Gửi yêu cầu"}
               </Button>
               <p className="text-center text-sm text-muted-foreground">
                 Đã có tài khoản?{" "}

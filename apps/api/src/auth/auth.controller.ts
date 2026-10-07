@@ -13,6 +13,12 @@ export class AuthController {
     return { status: 'ok', module: 'auth' };
   }
 
+  @Get('ready')
+  async getReadiness() {
+    await this.prisma.$queryRaw`SELECT 1`;
+    return { status: 'ok', module: 'api' };
+  }
+
   @Get('me')
   @UseGuards(AuthGuard)
   async getMe(@CurrentUser() user: CurrentUserType) {
@@ -41,6 +47,7 @@ export class AuthController {
   async getRoles() {
     const roles = await this.prisma.role.findMany({
       orderBy: { name: 'asc' },
+      take: 20,
     });
     return { data: roles };
   }

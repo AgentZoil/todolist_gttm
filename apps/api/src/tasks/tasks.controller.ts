@@ -68,11 +68,18 @@ export class TasksController {
   @Roles('DEPARTMENT_EDITOR')
   async findDepartmentAttention(
     @CurrentUser() user: { id: string; departmentId?: string | null },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     if (!user.departmentId) {
       throw new ForbiddenException('Tài khoản phòng ban chưa được gắn đơn vị');
     }
-    return this.tasksService.findDepartmentAttention(user.departmentId, user.id);
+    return this.tasksService.findDepartmentAttention(
+      user.departmentId,
+      user.id,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Post(':id/attention/read')

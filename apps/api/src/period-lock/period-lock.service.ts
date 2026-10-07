@@ -8,6 +8,7 @@ export class PeriodLockService {
   async findAll() {
     return this.prisma.periodLock.findMany({
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
+      take: 1_200,
     });
   }
 
