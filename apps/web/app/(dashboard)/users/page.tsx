@@ -71,6 +71,37 @@ const ROLE_LABEL: Record<string, string> = {
   VIEWER: "Người xem",
 };
 
+const SECRETARY_DISPLAY_ORDER = [
+  "Bùi Tuấn Anh",
+  "Nguyễn Văn Thạch",
+  "Nguyễn Sỹ Hưng",
+  "Nguyễn Viết Kiêm",
+  "Phạm Tiến Dũng",
+];
+
+function orderUsersForDisplay(users: User[]) {
+  const secretaryNames = new Set(SECRETARY_DISPLAY_ORDER);
+  const secretariesByName = new Map(
+    users
+      .filter((user) => user.role.name === "SECRETARY" && secretaryNames.has(user.fullName))
+      .map((user) => [user.fullName, user] as const),
+  );
+  const orderedSecretaries = SECRETARY_DISPLAY_ORDER.flatMap((name) => {
+    const user = secretariesByName.get(name);
+    return user ? [user] : [];
+  });
+  const others = users.filter(
+    (user) => user.role.name !== "SECRETARY" || !secretaryNames.has(user.fullName),
+  );
+  const insertionIndex = Math.min(2, others.length);
+
+  return [
+    ...others.slice(0, insertionIndex),
+    ...orderedSecretaries,
+    ...others.slice(insertionIndex),
+  ];
+}
+
 export default function UsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
@@ -371,6 +402,7 @@ export default function UsersPage() {
 
   const pendingRequests = registrationRequests.filter((request) => request.status === "PENDING");
   const pendingPasswordResetRequests = passwordResetRequests.filter((request) => request.status === "PENDING");
+  const displayUsers = orderUsersForDisplay(users);
 
   return (
     <div className="space-y-6">
@@ -658,7 +690,7 @@ export default function UsersPage() {
                   </td>
                 </tr>
               ) : (
-                users.map((user, index) => {
+                displayUsers.map((user, index) => {
                   const isEven = index % 2 === 0;
                   const isCurrentUser = user.id === currentUserId;
                   const roleBadge =
