@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Hệ thống theo dõi nhiệm vụ",
-  description: "Quản lý, theo dõi và tổng hợp tình trạng thực hiện nhiệm vụ",
+  title: "Theo dõi nhiệm vụ",
+  description:
+    "Hệ thống quản lý, theo dõi và đánh giá nhiệm vụ của CỤC ĐƯỜNG BỘ VIỆT NAM",
   icons: {
     icon: "/favicon.ico",
   },

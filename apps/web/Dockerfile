@@ -20,7 +20,7 @@ COPY apps/web/next.config.ts apps/web/tsconfig.json apps/web/postcss.config.mjs 
 COPY apps/web/app ./app
 COPY apps/web/components ./components
 COPY apps/web/lib ./lib
-RUN mkdir -p public
+COPY apps/web/public ./public
 RUN npm run build
 
 # Production image
@@ -34,6 +34,7 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 USER nextjs
 

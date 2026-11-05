@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -9,7 +10,6 @@ import {
   Building2,
   Users,
   ScrollText,
-  ClipboardCheck,
   Lock,
   ChevronsLeft,
   ChevronsRight,
@@ -48,7 +48,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "relative flex flex-col border-r border-border bg-card transition-all duration-300 ease-in-out",
+        "relative flex shrink-0 flex-col border-r border-border bg-card transition-all duration-300 ease-in-out",
         collapsed ? "w-[68px]" : "w-64"
       )}
     >
@@ -60,13 +60,31 @@ export function Sidebar() {
         {collapsed ? <ChevronsRight className="h-3 w-3" /> : <ChevronsLeft className="h-3 w-3" />}
       </button>
       {/* Logo */}
-      <div className={cn("flex items-center border-b border-border", collapsed ? "justify-center px-2 py-4" : "gap-2.5 px-5 py-5")}>
-        <Link href="/dashboard" className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 shadow-md shadow-primary/20">
-            <ClipboardCheck className="h-5 w-5 text-white" />
-          </div>
+      <div className={cn("flex items-center border-b border-border", collapsed ? "justify-center px-2 py-4" : "px-3 py-5")}>
+        <Link
+          href="/dashboard"
+          aria-label="CỤC ĐƯỜNG BỘ VIỆT NAM - Hệ thống theo dõi nhiệm vụ"
+          title={collapsed ? "CỤC ĐƯỜNG BỘ VIỆT NAM" : undefined}
+          className="flex min-w-0 items-center gap-2"
+        >
+          <Image
+            src="/branding/drvn-logo.png"
+            alt=""
+            width={100}
+            height={100}
+            className="h-10 w-10 shrink-0 object-contain"
+            unoptimized
+            priority
+          />
           {!collapsed && (
-            <span className="font-bold text-foreground text-sm tracking-tight">Theo dõi nhiệm vụ</span>
+            <span className="min-w-0">
+              <span className="block whitespace-nowrap text-xs font-bold leading-4 tracking-tight text-foreground">
+                CỤC ĐƯỜNG BỘ VIỆT NAM
+              </span>
+              <span className="mt-0.5 block text-[11px] font-medium leading-4 text-muted-foreground">
+                Hệ thống theo dõi nhiệm vụ
+              </span>
+            </span>
           )}
         </Link>
       </div>

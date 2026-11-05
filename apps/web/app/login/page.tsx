@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
+import loginBackground from "@/public/branding/Sunlit Highway Through Mountain Lake.png";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -44,20 +45,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-indigo-500/20 to-violet-500/20 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-br from-violet-500/20 to-indigo-500/20 rounded-full blur-3xl" />
+    <div className="relative isolate flex min-h-svh items-center justify-center overflow-x-hidden bg-sky-100 px-4 py-8 sm:px-6">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
+        <Image
+          src={loginBackground}
+          alt=""
+          fill
+          sizes="100vw"
+          priority
+          unoptimized
+          placeholder="blur"
+          className="object-fill"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-sky-950/15" />
       </div>
 
-      <Card className="w-full max-w-md relative z-10 shadow-[0_4px_20px_-2px_rgba(79,70,229,0.1)]">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-foreground">
-            Đăng nhập
+      <Card className="relative z-10 w-full max-w-md border border-white/70 bg-white/95 shadow-[0_16px_60px_-16px_rgba(15,23,42,0.55)] backdrop-blur-md">
+        <CardHeader className="gap-2 text-center">
+          <CardTitle className="text-xl font-bold uppercase leading-snug tracking-tight text-primary sm:text-[22px]">
+            Hệ thống theo dõi nhiệm vụ
           </CardTitle>
-          <CardDescription className="text-muted-foreground">
-            Hệ thống theo dõi và đánh giá nhiệm vụ
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
