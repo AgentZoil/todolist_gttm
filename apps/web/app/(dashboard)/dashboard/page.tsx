@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { DepartmentStatusChart } from "@/components/dashboard/department-status-chart";
+import { MonthPicker } from "@/components/ui/month-picker";
 import {
   ClipboardList,
   CheckCircle2,
@@ -167,14 +168,7 @@ export default function DashboardPage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="h-10 rounded-xl border border-border/60 bg-card/80 px-4 text-sm font-medium shadow-sm ring-1 ring-foreground/5 backdrop-blur-sm transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 focus:shadow-lg focus:shadow-primary/10"
-            />
-          </div>
+          <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
         </div>
       </div>
 
