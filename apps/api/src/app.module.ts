@@ -11,6 +11,7 @@ import { TasksModule } from './tasks/tasks.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { PeriodLockModule } from './period-lock/period-lock.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     AuditLogModule,
     PeriodLockModule,
     DashboardModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [
