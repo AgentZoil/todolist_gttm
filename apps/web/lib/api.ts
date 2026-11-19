@@ -87,8 +87,18 @@ export async function apiDownload(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const msg = body?.message || "Không thể xuất file báo cáo từ máy chủ";
+    // Khi lỗi, server trả về JSON (không phải binary) — đọc text trước rồi parse
+    const text = await res.text().catch(() => "");
+    let msg = "Không thể xuất file báo cáo từ máy chủ";
+    try {
+      const body = JSON.parse(text);
+      if (body?.message) msg = Array.isArray(body.message) ? body.message.join(". ") : body.message;
+      else if (body?.error) msg = body.error;
+    } catch {
+      if (text) msg = text;
+    }
+    if (res.status === 401) msg = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+    if (res.status === 403) msg = "Bạn không có quyền xuất báo cáo.";
     throw new Error(msg);
   }
 

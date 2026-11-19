@@ -11,15 +11,16 @@ import type { Response } from 'express';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
-  @Get('tasks')
-  @Roles('ADMIN')
-  async getReportData(@Query() query: ReportQueryDto) {
-    return this.reportsService.getReportData(query);
-  }
-
+  // Export route phải đứng TRƯỚC route động để NestJS match đúng
   @Get('tasks/export')
   @Roles('ADMIN')
   async exportExcel(@Query() query: ReportQueryDto, @Res() res: Response) {
     return this.reportsService.exportExcel(query, res);
+  }
+
+  @Get('tasks')
+  @Roles('ADMIN')
+  async getReportData(@Query() query: ReportQueryDto) {
+    return this.reportsService.getReportData(query);
   }
 }
