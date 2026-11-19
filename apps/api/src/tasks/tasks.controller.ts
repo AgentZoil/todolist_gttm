@@ -233,7 +233,7 @@ export class TasksController {
   }
 
   @Delete(':id')
-  @Roles('ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR')
+  @Roles('ADMIN', 'SECRETARY')
   async remove(
     @Param('id') id: string,
     @CurrentUser() user: { id: string; role: string },

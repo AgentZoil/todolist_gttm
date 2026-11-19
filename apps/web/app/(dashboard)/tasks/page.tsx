@@ -423,7 +423,8 @@ export default function TasksPage() {
   const isRevisionOnly = detailTask?.approvalStatus === "NEEDS_REVISION";
   const isIncompleteTask = detailTask?.status === "INCOMPLETE";
   const isCompletionOnly = isDepartmentEditor || isRevisionOnly;
-  const canDeleteDetail = canEditDetail && (!detailTask?.isFinalized || userInfo?.role === "ADMIN");
+  const canDeleteDetail = (userInfo?.role === "ADMIN" || userInfo?.role === "SECRETARY") &&
+    (!detailTask?.isFinalized || userInfo?.role === "ADMIN");
   const originalEditFormData = detailTask ? getEditFormData(detailTask) : {};
   const hasUnsavedChanges = editingDetail && Object.keys(originalEditFormData).some(
     (key) => editFormData[key] !== originalEditFormData[key],

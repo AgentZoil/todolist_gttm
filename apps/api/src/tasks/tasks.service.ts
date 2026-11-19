@@ -1269,19 +1269,12 @@ export class TasksService {
   }
 
   async remove(id: string, deletedBy: string, userRole: string) {
-    if (!['ADMIN', 'SECRETARY', 'DEPARTMENT_EDITOR'].includes(userRole)) {
+    if (!['ADMIN', 'SECRETARY'].includes(userRole)) {
       throw new ForbiddenException('Bạn không có quyền xóa nhiệm vụ');
     }
 
     const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) throw new NotFoundException('Task not found');
-
-    if (userRole === 'DEPARTMENT_EDITOR') {
-      const deptId = await this.getDepartmentId(deletedBy);
-      if (task.ownerDepartmentId !== deptId) {
-        throw new ForbiddenException('Bạn không có quyền xóa nhiệm vụ này');
-      }
-    }
 
     if (task.isFinalized && userRole !== 'ADMIN') {
       throw new ForbiddenException('Nhiệm vụ đã được chốt, không thể xóa');
