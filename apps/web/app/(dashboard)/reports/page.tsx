@@ -327,44 +327,6 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Hero Completion Rate Banner (Tương tự Dashboard page) */}
-        <div className="relative overflow-hidden rounded-2xl border border-primary/10 bg-gradient-to-br from-primary via-primary to-secondary p-6 shadow-xl shadow-primary/10">
-          <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-white/10 blur-3xl" />
-          <div className="absolute -bottom-20 -left-20 h-64 w-64 rounded-full bg-secondary/20 blur-3xl" />
-          <div className="relative z-10">
-            <div className="flex items-center justify-between">
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium text-primary-foreground/85">
-                  Tỷ lệ hoàn thành nhiệm vụ ({periodLabel})
-                </p>
-                <div className="flex items-baseline gap-3">
-                  <p className="text-4xl font-bold tabular-nums text-primary-foreground sm:text-5xl">
-                    {summary.completionRate}%
-                  </p>
-                  <span className="rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-primary-foreground backdrop-blur-sm">
-                    {selectedDeptLabel}
-                  </span>
-                </div>
-              </div>
-              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 backdrop-blur-sm ring-1 ring-white/25">
-                <TrendingUp className="h-8 w-8 text-primary-foreground" />
-              </div>
-            </div>
-            <div className="mt-5 space-y-1.5">
-              <div className="flex items-center justify-between text-xs text-primary-foreground/80">
-                <span>Tiến độ thực hiện: {summary.totalCompleted}/{summary.total} nhiệm vụ</span>
-                <span>{summary.completionRate}%</span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full bg-white/20">
-                <div
-                  className="h-full rounded-full bg-white transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, summary.completionRate))}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Stat Cards (Nhất quán 100% với dashboard/page.tsx) */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {/* Card 1: Tổng số */}
@@ -387,8 +349,11 @@ export default function ReportsPage() {
                 <CheckCircle2 className="h-4 w-4" />
               </div>
             </div>
-            <div className="mt-2 text-2xl font-bold tabular-nums text-emerald-600">
-              {summary.completedOnTime + summary.completedEarly}
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="text-2xl font-bold tabular-nums text-emerald-600">
+                {summary.completedOnTime + summary.completedEarly}
+              </span>
+              <span className="text-xs font-semibold text-emerald-600">({summary.completionRate}%)</span>
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground">Sớm: {summary.completedEarly} · Đúng: {summary.completedOnTime}</p>
           </Card>
