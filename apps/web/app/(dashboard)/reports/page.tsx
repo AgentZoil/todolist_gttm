@@ -1,19 +1,17 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import {
   FileSpreadsheet,
   Printer,
   Calendar,
   Search,
-  Filter,
   CheckCircle2,
   Clock,
   AlertTriangle,
   CalendarX,
   TrendingUp,
   ClipboardList,
-  Building2,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -79,9 +77,20 @@ interface SummaryStats {
 type DateFilterType = "ALL" | "YEAR" | "MONTH" | "CUSTOM";
 type StatusGroup = "ALL" | "COMPLETED" | "IN_PROGRESS" | "INCOMPLETE" | "CANCELLED";
 
+interface ReportFilterState {
+  dateFilterType: DateFilterType;
+  year: string;
+  month: string;
+  dateFrom: string;
+  dateTo: string;
+  departmentId: string;
+  statusGroup: StatusGroup;
+  search: string;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   COMPLETED_EARLY: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  COMPLETED_ON_TIME: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  COMPLETED_ON_TIME: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   COMPLETED_LATE: "bg-orange-50 text-orange-700 ring-1 ring-orange-200",
   IN_PROGRESS: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
   INCOMPLETE: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
@@ -98,25 +107,41 @@ export default function ReportsPage() {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loadingUser, setLoadingUser] = useState(true);
-  const [loadingData, setLoadingData] = useState(false);
+  const [filtering, setFiltering] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Selected Task for Preview modal
   const [previewTask, setPreviewTask] = useState<TaskItem | null>(null);
 
-  // Search keyword inside table
-  const [searchQuery, setSearchQuery] = useState("");
+  // Date Popover State
+  const [showDatePopover, setShowDatePopover] = useState(false);
+  const datePopoverRef = useRef<HTMLDivElement>(null);
 
-  // Filters
+  // Initial Filter defaults
   const currentYear = new Date().getFullYear();
-  const [dateFilterType, setDateFilterType] = useState<DateFilterType>("MONTH");
-  const [selectedYear, setSelectedYear] = useState<string>(String(currentYear));
-  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonth());
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
-  const [selectedDeptId, setSelectedDeptId] = useState<string>("");
-  const [statusGroup, setStatusGroup] = useState<StatusGroup>("ALL");
+  const defaultFilters: ReportFilterState = {
+    dateFilterType: "MONTH",
+    year: String(currentYear),
+    month: getCurrentMonth(),
+    dateFrom: "",
+    dateTo: "",
+    departmentId: "",
+    statusGroup: "ALL",
+    search: "",
+  };
+
+  // Draft filters (User changes these in UI)
+  const [draftFilters, setDraftFilters] = useState<ReportFilterState>(defaultFilters);
+
+  // Applied filters (The filters currently active for data)
+  const [appliedFilters, setAppliedFilters] = useState<ReportFilterState>(defaultFilters);
+
+  // Temp date states for popover editing
+  const [tempDateType, setTempDateType] = useState<DateFilterType>("MONTH");
+  const [tempYear, setTempYear] = useState<string>(String(currentYear));
+  const [tempMonth, setTempMonth] = useState<string>(getCurrentMonth());
+  const [tempDateFrom, setTempDateFrom] = useState<string>("");
+  const [tempDateTo, setTempDateTo] = useState<string>("");
 
   // Data
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -151,22 +176,21 @@ export default function ReportsPage() {
       .finally(() => setLoadingUser(false));
   }, []);
 
-  // 2. Fetch Report Data
-  const fetchReportData = () => {
+  // 2. Fetch Report Data using given filters
+  const executeFetch = (filtersToApply: ReportFilterState) => {
     if (!userInfo || userInfo.role !== "ADMIN") return;
-    setLoadingData(true);
-    setErrorMessage(null);
+    setFiltering(true);
 
     const params = new URLSearchParams();
-    params.set("dateFilterType", dateFilterType);
-    if (dateFilterType === "YEAR") params.set("year", selectedYear);
-    if (dateFilterType === "MONTH") params.set("month", selectedMonth);
-    if (dateFilterType === "CUSTOM") {
-      if (dateFrom) params.set("dateFrom", dateFrom);
-      if (dateTo) params.set("dateTo", dateTo);
+    params.set("dateFilterType", filtersToApply.dateFilterType);
+    if (filtersToApply.dateFilterType === "YEAR") params.set("year", filtersToApply.year);
+    if (filtersToApply.dateFilterType === "MONTH") params.set("month", filtersToApply.month);
+    if (filtersToApply.dateFilterType === "CUSTOM") {
+      if (filtersToApply.dateFrom) params.set("dateFrom", filtersToApply.dateFrom);
+      if (filtersToApply.dateTo) params.set("dateTo", filtersToApply.dateTo);
     }
-    if (selectedDeptId) params.set("departmentId", selectedDeptId);
-    if (statusGroup !== "ALL") params.set("statusGroup", statusGroup);
+    if (filtersToApply.departmentId) params.set("departmentId", filtersToApply.departmentId);
+    if (filtersToApply.statusGroup !== "ALL") params.set("statusGroup", filtersToApply.statusGroup);
 
     apiFetch<{ summary: SummaryStats; tasks: TaskItem[] }>(`/reports/tasks?${params.toString()}`)
       .then((res) => {
@@ -175,33 +199,112 @@ export default function ReportsPage() {
         setCurrentPage(1);
       })
       .catch((err) => {
-        setErrorMessage(err.message || "Không thể tải dữ liệu báo cáo");
+        console.error("Failed to load report data", err);
       })
-      .finally(() => setLoadingData(false));
+      .finally(() => setFiltering(false));
   };
 
+  // Initial load once userInfo is ready
   useEffect(() => {
     if (userInfo?.role === "ADMIN") {
-      fetchReportData();
+      executeFetch(appliedFilters);
     }
-  }, [userInfo, dateFilterType, selectedYear, selectedMonth, dateFrom, dateTo, selectedDeptId, statusGroup]);
+  }, [userInfo]);
 
-  // 3. Export Excel via standard apiDownload (Supabase session token included)
+  // Check if draft differs from applied
+  const hasFilterChanges = useMemo(() => {
+    return JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters);
+  }, [draftFilters, appliedFilters]);
+
+  // Check if any filter is set (not default/empty)
+  const hasAnyActiveFilter = useMemo(() => {
+    return (
+      draftFilters.departmentId !== "" ||
+      draftFilters.statusGroup !== "ALL" ||
+      draftFilters.search !== "" ||
+      draftFilters.dateFilterType !== "MONTH" ||
+      draftFilters.month !== getCurrentMonth()
+    );
+  }, [draftFilters]);
+
+  // Apply filters button clicked
+  const handleApplyFilters = () => {
+    setAppliedFilters(draftFilters);
+    executeFetch(draftFilters);
+  };
+
+  // Clear all filters
+  const handleClearFilters = () => {
+    setDraftFilters(defaultFilters);
+    setAppliedFilters(defaultFilters);
+    setTempDateType("MONTH");
+    setTempMonth(getCurrentMonth());
+    setTempYear(String(currentYear));
+    setTempDateFrom("");
+    setTempDateTo("");
+    executeFetch(defaultFilters);
+  };
+
+  // Open Date Popover
+  const handleOpenDatePopover = () => {
+    setTempDateType(draftFilters.dateFilterType);
+    setTempYear(draftFilters.year);
+    setTempMonth(draftFilters.month);
+    setTempDateFrom(draftFilters.dateFrom);
+    setTempDateTo(draftFilters.dateTo);
+    setShowDatePopover(true);
+  };
+
+  // Apply Date from Popover to draft
+  const handleSaveDatePopover = () => {
+    setDraftFilters((prev) => ({
+      ...prev,
+      dateFilterType: tempDateType,
+      year: tempYear,
+      month: tempMonth,
+      dateFrom: tempDateFrom,
+      dateTo: tempDateTo,
+    }));
+    setShowDatePopover(false);
+  };
+
+  // Quick Date Preset Select
+  const handleSelectDatePreset = (preset: "ALL" | "THIS_MONTH" | "LAST_MONTH" | "THIS_YEAR" | "LAST_YEAR") => {
+    const now = new Date();
+    if (preset === "ALL") {
+      setTempDateType("ALL");
+    } else if (preset === "THIS_MONTH") {
+      setTempDateType("MONTH");
+      setTempMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
+    } else if (preset === "LAST_MONTH") {
+      setTempDateType("MONTH");
+      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      setTempMonth(`${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`);
+    } else if (preset === "THIS_YEAR") {
+      setTempDateType("YEAR");
+      setTempYear(String(now.getFullYear()));
+    } else if (preset === "LAST_YEAR") {
+      setTempDateType("YEAR");
+      setTempYear(String(now.getFullYear() - 1));
+    }
+  };
+
+  // 3. Export Excel via standard apiDownload (using applied filters)
   const handleExportExcel = async () => {
     setExporting(true);
     try {
       const params = new URLSearchParams();
-      params.set("dateFilterType", dateFilterType);
-      if (dateFilterType === "YEAR") params.set("year", selectedYear);
-      if (dateFilterType === "MONTH") params.set("month", selectedMonth);
-      if (dateFilterType === "CUSTOM") {
-        if (dateFrom) params.set("dateFrom", dateFrom);
-        if (dateTo) params.set("dateTo", dateTo);
+      params.set("dateFilterType", appliedFilters.dateFilterType);
+      if (appliedFilters.dateFilterType === "YEAR") params.set("year", appliedFilters.year);
+      if (appliedFilters.dateFilterType === "MONTH") params.set("month", appliedFilters.month);
+      if (appliedFilters.dateFilterType === "CUSTOM") {
+        if (appliedFilters.dateFrom) params.set("dateFrom", appliedFilters.dateFrom);
+        if (appliedFilters.dateTo) params.set("dateTo", appliedFilters.dateTo);
       }
-      if (selectedDeptId) params.set("departmentId", selectedDeptId);
-      if (statusGroup !== "ALL") params.set("statusGroup", statusGroup);
+      if (appliedFilters.departmentId) params.set("departmentId", appliedFilters.departmentId);
+      if (appliedFilters.statusGroup !== "ALL") params.set("statusGroup", appliedFilters.statusGroup);
 
-      const filename = `Bao_cao_nhiem_vu_${dateFilterType}_${Date.now()}.xlsx`;
+      const filename = `Bao_cao_nhiem_vu_${appliedFilters.dateFilterType}_${Date.now()}.xlsx`;
       await apiDownload(`/reports/tasks/export?${params.toString()}`, filename);
     } catch (err: any) {
       alert(err.message || "Xuất báo cáo Excel thất bại");
@@ -222,19 +325,18 @@ export default function ReportsPage() {
     return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
   };
 
-  // Filter tasks with search query
+  // Filter tasks in table with draft search keyword
   const filteredTasks = useMemo(() => {
-    if (!searchQuery.trim()) return tasks;
-    const q = searchQuery.toLowerCase().trim();
+    if (!draftFilters.search.trim()) return tasks;
+    const q = draftFilters.search.toLowerCase().trim();
     return tasks.filter(
       (t) =>
         t.title.toLowerCase().includes(q) ||
-        t.taskCode.toLowerCase().includes(q) ||
         (t.documentNumber && t.documentNumber.toLowerCase().includes(q)) ||
         t.ownerDepartmentName.toLowerCase().includes(q) ||
         t.assignedBy.toLowerCase().includes(q)
     );
-  }, [tasks, searchQuery]);
+  }, [tasks, draftFilters.search]);
 
   const paginatedTasks = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -245,24 +347,41 @@ export default function ReportsPage() {
 
   // Selected department label
   const selectedDeptLabel = useMemo(() => {
-    if (!selectedDeptId) return "Toàn cơ quan";
-    const d = departments.find((dept) => dept.id === selectedDeptId);
+    if (!appliedFilters.departmentId) return "Toàn cơ quan";
+    const d = departments.find((dept) => dept.id === appliedFilters.departmentId);
     return d ? d.name : "Toàn cơ quan";
-  }, [selectedDeptId, departments]);
+  }, [appliedFilters.departmentId, departments]);
 
-  // Period label
-  const periodLabel = useMemo(() => {
-    if (dateFilterType === "ALL") return "Toàn thời gian";
-    if (dateFilterType === "YEAR") return `Năm ${selectedYear}`;
-    if (dateFilterType === "MONTH") {
-      const [y, m] = selectedMonth.split("-");
+  // Current date button label
+  const dateButtonLabel = useMemo(() => {
+    if (draftFilters.dateFilterType === "ALL") return "Toàn thời gian";
+    if (draftFilters.dateFilterType === "YEAR") return `Năm ${draftFilters.year}`;
+    if (draftFilters.dateFilterType === "MONTH") {
+      const [y, m] = draftFilters.month.split("-");
       return `Tháng ${Number(m)}/${y}`;
     }
-    if (dateFilterType === "CUSTOM") {
-      return `Từ ${dateFrom ? formatDate(dateFrom) : "..."} đến ${dateTo ? formatDate(dateTo) : "..."}`;
+    if (draftFilters.dateFilterType === "CUSTOM") {
+      if (draftFilters.dateFrom || draftFilters.dateTo) {
+        return `${draftFilters.dateFrom ? formatDate(draftFilters.dateFrom) : "..."} - ${draftFilters.dateTo ? formatDate(draftFilters.dateTo) : "..."}`;
+      }
+      return "Chọn khoảng ngày";
+    }
+    return "Thời gian";
+  }, [draftFilters]);
+
+  // Period label for report headers
+  const appliedPeriodLabel = useMemo(() => {
+    if (appliedFilters.dateFilterType === "ALL") return "Toàn thời gian";
+    if (appliedFilters.dateFilterType === "YEAR") return `Năm ${appliedFilters.year}`;
+    if (appliedFilters.dateFilterType === "MONTH") {
+      const [y, m] = appliedFilters.month.split("-");
+      return `Tháng ${Number(m)}/${y}`;
+    }
+    if (appliedFilters.dateFilterType === "CUSTOM") {
+      return `Từ ${appliedFilters.dateFrom ? formatDate(appliedFilters.dateFrom) : "..."} đến ${appliedFilters.dateTo ? formatDate(appliedFilters.dateTo) : "..."}`;
     }
     return "";
-  }, [dateFilterType, selectedYear, selectedMonth, dateFrom, dateTo]);
+  }, [appliedFilters]);
 
   if (loadingUser) {
     return (
@@ -290,7 +409,7 @@ export default function ReportsPage() {
   return (
     <div className="space-y-6">
       {/* ========================================================
-          SCREEN VIEW: UI tương thích 100% với Codebase hiện tại
+          SCREEN VIEW: UI nhất quán chuẩn với /tasks và Dashboard
          ======================================================== */}
       <div className="space-y-6 print:hidden">
         {/* Header */}
@@ -300,7 +419,7 @@ export default function ReportsPage() {
               Báo cáo & Thống kê nhiệm vụ
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Tổng hợp tiến độ, kết xuất file Excel định dạng hành chính và in ấn báo cáo
+              Tổng hợp tiến độ, xuất file Excel và in ấn báo cáo theo chuẩn hành chính
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -327,7 +446,7 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Stat Cards (Nhất quán 100% với dashboard/page.tsx) */}
+        {/* 6 Stat Cards (Nhất quán 100% với Dashboard, không có banner tím) */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {/* Card 1: Tổng số */}
           <Card className="p-4 rounded-xl border border-border bg-card shadow-sm hover:shadow-md transition-all">
@@ -338,7 +457,7 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="mt-2 text-2xl font-bold tabular-nums text-foreground">{summary.total}</div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Theo kỳ lọc</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Nhiệm vụ trong kỳ</p>
           </Card>
 
           {/* Card 2: Hoàn thành đúng hạn */}
@@ -379,7 +498,7 @@ export default function ReportsPage() {
               </div>
             </div>
             <div className="mt-2 text-2xl font-bold tabular-nums text-blue-600">{summary.inProgress}</div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Trong thời hạn</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Trong hạn quy định</p>
           </Card>
 
           {/* Card 5: Không hoàn thành */}
@@ -407,151 +526,257 @@ export default function ReportsPage() {
           </Card>
         </div>
 
-        {/* Filter Toolbar (Chuẩn giao diện như tasks/page.tsx) */}
-        <Card className="p-3.5 rounded-2xl border border-border bg-card shadow-sm ring-1 ring-foreground/5 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            {/* Quick Time Pills */}
-            <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl">
-              {[
-                { id: "ALL", label: "Toàn bộ" },
-                { id: "YEAR", label: "Theo năm" },
-                { id: "MONTH", label: "Theo tháng" },
-                { id: "CUSTOM", label: "Khoảng ngày" },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setDateFilterType(item.id as DateFilterType)}
-                  className={cn(
-                    "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
-                    dateFilterType === item.id
-                      ? "bg-card text-foreground shadow-sm ring-1 ring-foreground/5"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+        {/* Filter Toolbar (Thiết kế & Logic chuẩn /tasks: Chọn filter rồi ấn Áp dụng) */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Lọc phòng ban */}
+          <label className="block w-full sm:w-[220px]">
+            <span className="sr-only">Phòng ban / Đơn vị</span>
+            <select
+              value={draftFilters.departmentId}
+              onChange={(e) => setDraftFilters((prev) => ({ ...prev, departmentId: e.target.value }))}
+              disabled={filtering}
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            >
+              <option value="">Tất cả phòng ban/đơn vị</option>
+              {[...departments]
+                .sort((a, b) => a.id.localeCompare(b.id))
+                .map((dept, i) => (
+                  <option key={dept.id} value={dept.id}>
+                    {i + 1}. {dept.name}
+                  </option>
+                ))}
+            </select>
+          </label>
 
-            {/* Keyword Search */}
-            <div className="relative w-full sm:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Tìm mã NV, số VB, tiêu đề..."
-                className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 transition-colors"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+          {/* Lọc trạng thái */}
+          <label className="block w-full sm:w-[190px]">
+            <span className="sr-only">Trạng thái đánh giá</span>
+            <select
+              value={draftFilters.statusGroup}
+              onChange={(e) => setDraftFilters((prev) => ({ ...prev, statusGroup: e.target.value as StatusGroup }))}
+              disabled={filtering}
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 pr-8 text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            >
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="COMPLETED">Đã hoàn thành</option>
+              <option value="IN_PROGRESS">Đang thực hiện</option>
+              <option value="INCOMPLETE">Chưa hoàn thành / Quá hạn</option>
+              <option value="CANCELLED">Đã hủy</option>
+            </select>
+          </label>
+
+          {/* Date Filter Popover thông minh, khoa học theo design system */}
+          <div className="relative w-full sm:w-[200px]" ref={datePopoverRef}>
+            <button
+              type="button"
+              onClick={() => {
+                if (!showDatePopover) handleOpenDatePopover();
+                else setShowDatePopover(false);
+              }}
+              className={cn(
+                "flex h-9 w-full items-center gap-2 rounded-lg border bg-background px-3 text-left text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20",
+                draftFilters.dateFilterType !== "ALL"
+                  ? "border-primary/40 font-medium text-primary"
+                  : "border-border text-muted-foreground"
               )}
-            </div>
+            >
+              <Calendar className="h-4 w-4 shrink-0" />
+              <span className="truncate">{dateButtonLabel}</span>
+            </button>
+
+            {showDatePopover && (
+              <>
+                <div className="fixed inset-0 z-40 cursor-pointer" onClick={() => setShowDatePopover(false)} />
+                <div className="absolute left-0 top-full z-50 mt-1.5 w-[310px] rounded-xl border border-border bg-card p-3.5 shadow-xl ring-1 ring-foreground/5 space-y-3">
+                  {/* Preset Buttons */}
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Chọn nhanh
+                    </label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {[
+                        { id: "ALL", label: "Toàn bộ" },
+                        { id: "THIS_MONTH", label: "Tháng này" },
+                        { id: "LAST_MONTH", label: "Tháng trước" },
+                        { id: "THIS_YEAR", label: "Năm nay" },
+                        { id: "LAST_YEAR", label: "Năm trước" },
+                      ].map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleSelectDatePreset(preset.id as any)}
+                          className={cn(
+                            "rounded-md py-1 px-2 text-xs font-medium transition-colors border",
+                            (preset.id === "ALL" && tempDateType === "ALL") ||
+                              (preset.id === "THIS_MONTH" && tempDateType === "MONTH" && tempMonth === getCurrentMonth())
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border bg-muted/40 hover:bg-muted text-foreground"
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Mode Tabs */}
+                  <div className="pt-2 border-t border-border/60">
+                    <label className="block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                      Tùy chỉnh thời gian
+                    </label>
+                    <div className="flex rounded-lg bg-muted/60 p-0.5 text-xs font-medium">
+                      <button
+                        type="button"
+                        onClick={() => setTempDateType("MONTH")}
+                        className={cn(
+                          "flex-1 rounded-md py-1 text-center transition-colors",
+                          tempDateType === "MONTH" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        Tháng
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTempDateType("YEAR")}
+                        className={cn(
+                          "flex-1 rounded-md py-1 text-center transition-colors",
+                          tempDateType === "YEAR" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        Năm
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTempDateType("CUSTOM")}
+                        className={cn(
+                          "flex-1 rounded-md py-1 text-center transition-colors",
+                          tempDateType === "CUSTOM" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        Khoảng ngày
+                      </button>
+                    </div>
+
+                    <div className="mt-2.5">
+                      {tempDateType === "MONTH" && (
+                        <MonthPicker value={tempMonth} onChange={setTempMonth} />
+                      )}
+                      {tempDateType === "YEAR" && (
+                        <select
+                          value={tempYear}
+                          onChange={(e) => setTempYear(e.target.value)}
+                          className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        >
+                          {[2024, 2025, 2026, 2027, 2028].map((y) => (
+                            <option key={y} value={y}>
+                              Năm {y}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      {tempDateType === "CUSTOM" && (
+                        <div className="flex flex-col gap-2">
+                          <div>
+                            <span className="text-[11px] text-muted-foreground">Từ ngày:</span>
+                            <input
+                              type="date"
+                              value={tempDateFrom}
+                              onChange={(e) => setTempDateFrom(e.target.value)}
+                              className="h-8 w-full rounded-lg border border-border bg-background px-2.5 text-xs shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 mt-0.5"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[11px] text-muted-foreground">Đến ngày:</span>
+                            <input
+                              type="date"
+                              value={tempDateTo}
+                              min={tempDateFrom || undefined}
+                              onChange={(e) => setTempDateTo(e.target.value)}
+                              className="h-8 w-full rounded-lg border border-border bg-background px-2.5 text-xs shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 mt-0.5"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Popover Action Buttons */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-border/60">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleSaveDatePopover}
+                      className="flex-1 h-8 text-xs font-medium"
+                    >
+                      Xong
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowDatePopover(false)}
+                      className="h-8 text-xs"
+                    >
+                      Đóng
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 pt-1 border-t border-border/50">
-            {/* Mốc thời gian */}
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Mốc thời gian
-              </label>
-              {dateFilterType === "ALL" && (
-                <div className="flex h-9 items-center rounded-lg border border-border bg-muted/30 px-3 text-xs text-muted-foreground">
-                  Toàn thời gian (Từ trước đến nay)
-                </div>
-              )}
-              {dateFilterType === "YEAR" && (
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                >
-                  {[2024, 2025, 2026, 2027, 2028].map((y) => (
-                    <option key={y} value={y}>
-                      Năm {y}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {dateFilterType === "MONTH" && (
-                <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
-              )}
-              {dateFilterType === "CUSTOM" && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => setDateFrom(e.target.value)}
-                    className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                  <span className="text-muted-foreground">-</span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => setDateTo(e.target.value)}
-                    className="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Phòng ban */}
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Phòng ban / Đơn vị
-              </label>
-              <select
-                value={selectedDeptId}
-                onChange={(e) => setSelectedDeptId(e.target.value)}
-                className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          {/* Ô tìm kiếm từ khóa (tiêu đề, số VB, lãnh đạo...) */}
+          <div className="relative flex-1 min-w-[200px] sm:max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={draftFilters.search}
+              onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
+              placeholder="Tìm tiêu đề, số VB..."
+              className="h-9 w-full rounded-lg border border-border bg-background pl-8 pr-7 text-sm shadow-sm ring-1 ring-foreground/5 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            />
+            {draftFilters.search && (
+              <button
+                type="button"
+                onClick={() => setDraftFilters((prev) => ({ ...prev, search: "" }))}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                <option value="">Tất cả phòng ban</option>
-                {[...departments]
-                  .sort((a, b) => a.id.localeCompare(b.id))
-                  .map((dept, i) => (
-                    <option key={dept.id} value={dept.id}>
-                      {i + 1}. {dept.name}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Nhóm trạng thái */}
-            <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Trạng thái đánh giá
-              </label>
-              <select
-                value={statusGroup}
-                onChange={(e) => setStatusGroup(e.target.value as StatusGroup)}
-                className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm shadow-sm ring-1 ring-foreground/5 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="ALL">Tất cả nhiệm vụ ({summary.total})</option>
-                <option value="COMPLETED">Đã hoàn thành ({summary.totalCompleted})</option>
-                <option value="IN_PROGRESS">Đang thực hiện ({summary.inProgress})</option>
-                <option value="INCOMPLETE">Chưa hoàn thành / Quá hạn ({summary.incomplete})</option>
-                <option value="CANCELLED">Đã hủy ({summary.cancelled})</option>
-              </select>
-            </div>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-        </Card>
 
-        {/* Detailed Table (Tương thích chuẩn UI tasks/page.tsx) */}
+          {/* Nút Xóa bộ lọc */}
+          {hasAnyActiveFilter && (
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="h-9 rounded-lg px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Xóa
+            </button>
+          )}
+
+          {/* Nút Áp dụng (Chỉ xuất hiện khi có thay đổi bộ lọc, chuẩn theo /tasks) */}
+          {hasFilterChanges && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleApplyFilters}
+              disabled={filtering}
+            >
+              {filtering ? <Loader2 className="h-4 w-4 animate-spin" /> : "Áp dụng"}
+            </Button>
+          )}
+        </div>
+
+        {/* Detailed Table (Không còn cột Mã nhiệm vụ) */}
         <Card className="overflow-hidden relative shadow-sm border-border">
-          {loadingData && (
+          {filtering && (
             <div className="absolute inset-0 bg-background/60 flex items-center justify-center z-10">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                <span className="text-sm font-medium">Đang tổng hợp dữ liệu...</span>
+                <span className="text-sm font-medium">Đang tải dữ liệu...</span>
               </div>
             </div>
           )}
@@ -564,7 +789,7 @@ export default function ReportsPage() {
               </span>
             </div>
             <span className="text-xs text-muted-foreground font-medium">
-              {periodLabel} · {selectedDeptLabel}
+              {appliedPeriodLabel} · {selectedDeptLabel}
             </span>
           </div>
 
@@ -575,22 +800,19 @@ export default function ReportsPage() {
                   <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12">
                     STT
                   </th>
-                  <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-28 whitespace-nowrap">
-                    Mã NV
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-2/5">
+                    Nội dung nhiệm vụ & Số VB
                   </th>
-                  <th className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-2/5">
-                    Nhiệm vụ & Số VB
-                  </th>
-                  <th className="text-left px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                     Đơn vị chủ trì
                   </th>
-                  <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                  <th className="text-center px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                     Hạn hoàn thành
                   </th>
-                  <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                  <th className="text-center px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                     Thực tế
                   </th>
-                  <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                  <th className="text-center px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                     Đánh giá
                   </th>
                   <th className="text-center px-2 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12">
@@ -601,7 +823,7 @@ export default function ReportsPage() {
               <tbody>
                 {filteredTasks.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-10 text-center text-muted-foreground">
+                    <td colSpan={7} className="p-10 text-center text-muted-foreground">
                       Không tìm thấy nhiệm vụ nào phù hợp với bộ lọc hiện tại.
                     </td>
                   </tr>
@@ -618,10 +840,7 @@ export default function ReportsPage() {
                       <td className="px-2 py-2.5 text-center text-muted-foreground tabular-nums">
                         {(currentPage - 1) * pageSize + index + 1}
                       </td>
-                      <td className="px-2 py-2.5 text-center font-mono text-xs font-semibold text-foreground">
-                        {task.taskCode}
-                      </td>
-                      <td className="px-2 py-2.5">
+                      <td className="px-3 py-2.5">
                         <div className="line-clamp-2 font-medium text-foreground">{task.title}</div>
                         <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">
                           {task.documentNumber ? `VB: ${task.documentNumber} · ` : ""}
@@ -633,7 +852,7 @@ export default function ReportsPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-2 py-2.5 whitespace-nowrap font-medium text-foreground">
+                      <td className="px-3 py-2.5 whitespace-nowrap font-medium text-foreground">
                         {task.ownerDepartmentName}
                         {task.coordinatingUnits && (
                           <div className="text-[11px] text-muted-foreground font-normal">
@@ -641,13 +860,13 @@ export default function ReportsPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-2 py-2.5 text-center whitespace-nowrap tabular-nums text-muted-foreground font-medium">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap tabular-nums text-muted-foreground font-medium">
                         {formatDate(task.requiredCompletionDate)}
                       </td>
-                      <td className="px-2 py-2.5 text-center whitespace-nowrap tabular-nums text-muted-foreground font-medium">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap tabular-nums text-muted-foreground font-medium">
                         {formatDate(task.actualCompletionDate)}
                       </td>
-                      <td className="px-2 py-2.5 text-center whitespace-nowrap">
+                      <td className="px-3 py-2.5 text-center whitespace-nowrap">
                         <span
                           className={cn(
                             "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold",
@@ -678,7 +897,7 @@ export default function ReportsPage() {
           </div>
 
           {/* Pagination */}
-          {!loadingData && filteredTasks.length > pageSize && (
+          {!filtering && filteredTasks.length > pageSize && (
             <div className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground bg-card">
               <div>
                 Trang {currentPage} / {totalPages} (Hiển thị {paginatedTasks.length}/{filteredTasks.length} nhiệm vụ)
@@ -709,16 +928,18 @@ export default function ReportsPage() {
       </div>
 
       {/* ========================================================
-          PREVIEW MODAL: Xem chi tiết nhiệm vụ từ Báo cáo
+          PREVIEW MODAL: Xem chi tiết nhiệm vụ (Không có Mã NV)
          ======================================================== */}
       {previewTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 print:hidden">
           <div className="fixed inset-0 cursor-pointer bg-slate-950/45 backdrop-blur-sm" onClick={() => setPreviewTask(null)} />
           <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-5 py-4 bg-muted/20">
-              <div>
-                <span className="font-mono text-xs font-semibold text-primary">{previewTask.taskCode}</span>
-                <h3 className="text-base font-bold text-foreground mt-0.5">{previewTask.title}</h3>
+              <div className="min-w-0 pr-4">
+                <h3 className="text-base font-bold text-foreground line-clamp-1">{previewTask.title}</h3>
+                {previewTask.documentNumber && (
+                  <p className="text-xs text-muted-foreground mt-0.5">Số văn bản: {previewTask.documentNumber}</p>
+                )}
               </div>
               <button onClick={() => setPreviewTask(null)} className="rounded p-1 text-muted-foreground hover:text-foreground">
                 <X className="h-5 w-5" />
@@ -783,7 +1004,7 @@ export default function ReportsPage() {
 
       {/* ========================================================
           PRINT VIEW: Chuẩn văn bản hành chính Việt Nam (Nghị định 30/2020/NĐ-CP)
-          Khổ giấy A4 ngang, phông Times New Roman, border đen sắc nét
+          Khổ giấy A4 ngang, phông Times New Roman, border đen sắc nét (Không có Mã NV)
          ======================================================== */}
       <div className="hidden print:block font-serif text-black leading-tight bg-white">
         {/* Header 2 cột hành chính */}
@@ -808,7 +1029,7 @@ export default function ReportsPage() {
             BÁO CÁO TỔNG HỢP THEO DÕI VÀ ĐÁNH GIÁ THỰC HIỆN NHIỆM VỤ
           </h1>
           <p className="italic text-xs mt-1">
-            (Kỳ báo cáo: {periodLabel} — Phạm vi: {selectedDeptLabel})
+            (Kỳ báo cáo: {appliedPeriodLabel} — Phạm vi: {selectedDeptLabel})
           </p>
         </div>
 
@@ -843,28 +1064,26 @@ export default function ReportsPage() {
           </table>
         </div>
 
-        {/* PHẦN II: BẢNG DANH SÁCH CHI TIẾT */}
+        {/* PHẦN II: BẢNG DANH SÁCH CHI TIẾT (Không có Mã NV) */}
         <div className="mb-6">
           <h2 className="font-bold text-xs uppercase mb-1.5">II. DANH SÁCH CHI TIẾT CÁC NHIỆM VỤ</h2>
           <table className="w-full text-[10px] border-collapse border border-black">
             <thead>
               <tr className="bg-slate-100 font-bold text-center">
                 <th className="border border-black p-1 w-8">STT</th>
-                <th className="border border-black p-1 w-20">Mã NV</th>
                 <th className="border border-black p-1 w-24">Số VB</th>
                 <th className="border border-black p-1 text-left">Nội dung nhiệm vụ</th>
-                <th className="border border-black p-1 w-28">Đơn vị chủ trì</th>
-                <th className="border border-black p-1 w-16">Hạn HT</th>
-                <th className="border border-black p-1 w-16">Thực tế</th>
-                <th className="border border-black p-1 w-24">Đánh giá</th>
-                <th className="border border-black p-1 w-36">Tiến độ / Bằng chứng</th>
+                <th className="border border-black p-1 w-32">Đơn vị chủ trì</th>
+                <th className="border border-black p-1 w-20">Hạn HT</th>
+                <th className="border border-black p-1 w-20">Thực tế</th>
+                <th className="border border-black p-1 w-28">Đánh giá</th>
+                <th className="border border-black p-1 w-40">Tiến độ / Bằng chứng</th>
               </tr>
             </thead>
             <tbody>
               {filteredTasks.map((task, idx) => (
                 <tr key={task.id} className="break-inside-avoid">
                   <td className="border border-black p-1 text-center font-medium">{idx + 1}</td>
-                  <td className="border border-black p-1 text-center font-mono font-medium">{task.taskCode}</td>
                   <td className="border border-black p-1 text-center">{task.documentNumber || "—"}</td>
                   <td className="border border-black p-1">
                     <div className="font-semibold text-black">{task.title}</div>

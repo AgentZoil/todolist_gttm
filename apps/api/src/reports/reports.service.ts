@@ -263,20 +263,20 @@ export class ReportsService {
     orgCell.font = { name: 'Times New Roman', size: 11, bold: true };
     orgCell.alignment = { horizontal: 'left', vertical: 'middle' };
 
-    sheet.mergeCells('H1:K1');
-    const nationalCell = sheet.getCell('H1');
+    sheet.mergeCells('G1:J1');
+    const nationalCell = sheet.getCell('G1');
     nationalCell.value = 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM';
     nationalCell.font = { name: 'Times New Roman', size: 11, bold: true };
     nationalCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
-    sheet.mergeCells('H2:K2');
-    const mottoCell = sheet.getCell('H2');
+    sheet.mergeCells('G2:J2');
+    const mottoCell = sheet.getCell('G2');
     mottoCell.value = 'Độc lập - Tự do - Hạnh phúc';
     mottoCell.font = { name: 'Times New Roman', size: 10, italic: true };
     mottoCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
     // 2. Title Section
-    sheet.mergeCells('A4:K4');
+    sheet.mergeCells('A4:J4');
     const titleCell = sheet.getCell('A4');
     titleCell.value = 'BÁO CÁO THEO DÕI VÀ ĐÁNH GIÁ THỰC HIỆN NHIỆM VỤ';
     titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF1E3A8A' } };
@@ -292,7 +292,7 @@ export class ReportsService {
       periodText = `Thời gian: Từ ${dto.dateFrom || '...'} đến ${dto.dateTo || '...'}`;
     }
 
-    sheet.mergeCells('A5:K5');
+    sheet.mergeCells('A5:J5');
     const periodCell = sheet.getCell('A5');
     periodCell.value = periodText;
     periodCell.font = { name: 'Times New Roman', size: 11, italic: true };
@@ -333,7 +333,6 @@ export class ReportsService {
     const tableHeaderRowIndex = 10;
     const headers = [
       'STT',
-      'Mã nhiệm vụ',
       'Số văn bản',
       'Nội dung nhiệm vụ',
       'Đơn vị chủ trì',
@@ -374,7 +373,6 @@ export class ReportsService {
       const row = sheet.getRow(rowIdx);
       row.values = [
         idx + 1,
-        task.taskCode,
         task.documentNumber || '-',
         task.title,
         task.ownerDepartmentName,
@@ -402,13 +400,15 @@ export class ReportsService {
       // Column specific alignments
       row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
       row.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+      row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
       row.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' };
       row.getCell(8).alignment = { horizontal: 'center', vertical: 'middle' };
-      row.getCell(9).alignment = { horizontal: 'center', vertical: 'middle' };
 
       // Status color highlights
-      const statusCell = row.getCell(9);
+      const statusCell = row.getCell(8);
       if (['COMPLETED_EARLY', 'COMPLETED_ON_TIME'].includes(task.status)) {
         statusCell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FF15803D' } };
       } else if (task.status === 'COMPLETED_LATE') {
@@ -423,9 +423,8 @@ export class ReportsService {
     // Column Widths
     sheet.columns = [
       { width: 6 },  // STT
-      { width: 14 }, // Mã NV
-      { width: 14 }, // Số VB
-      { width: 35 }, // Nội dung
+      { width: 16 }, // Số VB
+      { width: 40 }, // Nội dung
       { width: 22 }, // Đơn vị chủ trì
       { width: 20 }, // Phối hợp
       { width: 14 }, // Hạn HT
@@ -437,8 +436,8 @@ export class ReportsService {
 
     // Signatures
     const finalRowIdx = tableHeaderRowIndex + tasks.length + 3;
-    sheet.mergeCells(`I${finalRowIdx}:K${finalRowIdx}`);
-    const signDateCell = sheet.getCell(`I${finalRowIdx}`);
+    sheet.mergeCells(`H${finalRowIdx}:J${finalRowIdx}`);
+    const signDateCell = sheet.getCell(`H${finalRowIdx}`);
     const today = new Date();
     signDateCell.value = `Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`;
     signDateCell.font = { name: 'Times New Roman', size: 11, italic: true };
@@ -450,8 +449,8 @@ export class ReportsService {
     makerCell.font = { name: 'Times New Roman', size: 11, bold: true };
     makerCell.alignment = { horizontal: 'center' };
 
-    sheet.mergeCells(`I${finalRowIdx + 1}:K${finalRowIdx + 1}`);
-    const leaderCell = sheet.getCell(`I${finalRowIdx + 1}`);
+    sheet.mergeCells(`H${finalRowIdx + 1}:J${finalRowIdx + 1}`);
+    const leaderCell = sheet.getCell(`H${finalRowIdx + 1}`);
     leaderCell.value = 'THỦ TRƯỞNG ĐƠN VỊ';
     leaderCell.font = { name: 'Times New Roman', size: 11, bold: true };
     leaderCell.alignment = { horizontal: 'center' };
