@@ -61,3 +61,52 @@ export async function apiFetch<T>(
 
   return res.json();
 }
+
+export async function apiDownload(
+  path: string,
+  defaultFilename = "Bao_cao_nhiem_vu.xlsx"
+): Promise<void> {
+  const supabase = createClient();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  const headers: Record<string, string> = {};
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "GET",
+      headers,
+    });
+  } catch {
+    throw new Error("Không kết nối được hệ thống. Vui lòng kiểm tra mạng rồi thử lại.");
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const msg = body?.message || "Không thể xuất file báo cáo từ máy chủ";
+    throw new Error(msg);
+  }
+
+  const blob = await res.blob();
+  const contentDisposition = res.headers.get("content-disposition");
+  let filename = defaultFilename;
+  if (contentDisposition) {
+    const match = contentDisposition.match(/filename="?([^"]+)"?/);
+    if (match?.[1]) filename = match[1];
+  }
+
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
