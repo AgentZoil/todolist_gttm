@@ -51,18 +51,20 @@ export function Sidebar() {
     <aside
       className={cn(
         "relative flex shrink-0 flex-col border-r border-border bg-card transition-all duration-300 ease-in-out",
-        collapsed ? "w-[68px]" : "w-64"
+        collapsed ? "w-[68px]" : "w-[68px] md:w-64"
       )}
     >
       {/* Collapse toggle - floating circle on right edge */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition-colors hover:bg-accent hover:text-foreground"
+        aria-label={collapsed ? "Mở rộng thanh điều hướng" : "Thu gọn thanh điều hướng"}
+        aria-expanded={!collapsed}
+        className="absolute -right-3 top-1/2 z-10 hidden h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-md transition-colors hover:bg-accent hover:text-foreground md:flex"
       >
         {collapsed ? <ChevronsRight className="h-3 w-3" /> : <ChevronsLeft className="h-3 w-3" />}
       </button>
       {/* Logo */}
-      <div className={cn("flex items-center border-b border-border", collapsed ? "justify-center px-2 py-4" : "px-3 py-5")}>
+      <div className={cn("flex items-center justify-center border-b border-border px-2 py-4", !collapsed && "md:justify-start md:px-3 md:py-5")}>
         <Link
           href="/dashboard"
           aria-label="CỤC ĐƯỜNG BỘ VIỆT NAM - Hệ thống theo dõi nhiệm vụ"
@@ -79,7 +81,7 @@ export function Sidebar() {
             priority
           />
           {!collapsed && (
-            <span className="min-w-0">
+            <span className="hidden min-w-0 md:block">
               <span className="block whitespace-nowrap text-xs font-bold leading-4 tracking-tight text-foreground">
                 CỤC ĐƯỜNG BỘ VIỆT NAM
               </span>
@@ -100,10 +102,12 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                title={collapsed ? item.label : undefined}
+                aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
+                title={item.label}
                 className={cn(
-                  "group flex items-center rounded-xl text-sm font-medium transition-all duration-150",
-                  collapsed ? "justify-center px-2 py-2.5" : "gap-3 px-3 py-2.5",
+                  "group flex min-h-11 items-center justify-center rounded-xl px-2 py-2.5 text-sm font-medium transition-all duration-150",
+                  !collapsed && "md:justify-start md:gap-3 md:px-3",
                   isActive
                     ? "bg-accent text-accent-foreground shadow-sm ring-1 ring-primary/10"
                     : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -115,7 +119,7 @@ export function Sidebar() {
                     isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
                   )}
                 />
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span className="hidden md:inline">{item.label}</span>}
               </Link>
             );
           })}

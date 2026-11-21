@@ -15,7 +15,7 @@ export default function DashboardLayout({
         <div className="print:hidden">
           <Header />
         </div>
-        <main className="flex-1 overflow-y-auto p-6 print:block print:h-auto print:overflow-visible print:p-0">{children}</main>
+        <main className="flex-1 overflow-y-auto p-3 sm:p-6 print:block print:h-auto print:overflow-visible print:p-0">{children}</main>
       </div>
     </div>
   );

@@ -70,7 +70,7 @@ export function MonthPicker({
           id={dialogId}
           role="dialog"
           aria-label="Chọn tháng và năm"
-          className="absolute left-0 top-full z-50 mt-2 w-72 rounded-xl border border-border bg-card p-3 shadow-lg sm:left-auto sm:right-0"
+          className="absolute left-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-7rem)] rounded-xl border border-border bg-card p-3 shadow-lg sm:left-auto sm:right-0"
         >
           <div className="mb-3 flex items-center justify-between">
             <button
