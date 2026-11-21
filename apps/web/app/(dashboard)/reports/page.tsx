@@ -13,7 +13,6 @@ import {
   type ReportData, type ReportFilters, type ReportTask,
 } from "./report-data";
 import { ReportPrint } from "./report-print";
-import styles from "./reports.module.css";
 
 interface UserInfo { role: string; fullName: string }
 interface Department { id: string; name: string }
@@ -22,7 +21,7 @@ type ReportRequest = { query: string };
 type ReportResult = { request: ReportRequest } & ({ report: ReportData } | { error: string });
 
 const PAGE_SIZE = 20;
-const selectClass = "h-11 w-full min-w-0 rounded-lg border border-input bg-card px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const selectClass = "h-10 w-full min-w-0 rounded-lg border border-border bg-card px-3 text-sm shadow-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20";
 const statusColors: Record<ReportTask["status"], string> = {
   COMPLETED_EARLY: "bg-emerald-50 text-emerald-800",
   COMPLETED_ON_TIME: "bg-emerald-50 text-emerald-800",
@@ -201,29 +200,29 @@ export default function ReportsPage() {
   return (
     <>
       {/* SCREEN VIEW: UI nhất quán chuẩn với /tasks và Dashboard */}
-      <div className={cn(styles.screen, "mx-auto max-w-7xl space-y-5 print:hidden")}>
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="space-y-6 print:hidden">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className={cn(styles.title, "text-3xl tracking-tight text-foreground sm:text-4xl")}>Báo cáo nhiệm vụ</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Tổng hợp kết quả thực hiện theo kỳ và đơn vị chủ trì.</p>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground lg:text-3xl">Báo cáo nhiệm vụ</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Tổng hợp kết quả thực hiện theo kỳ và đơn vị chủ trì.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="h-11 bg-card px-4" disabled={!readyToOutput} onClick={() => window.print()}><Printer /> In báo cáo</Button>
-            <Button type="button" className={cn(styles.primary, "h-11 px-4")} disabled={!readyToOutput} onClick={exportExcel}>
+          <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+            <Button type="button" variant="outline" size="lg" className="bg-card shadow-sm" disabled={!readyToOutput} onClick={() => window.print()}><Printer /> In báo cáo</Button>
+            <Button type="button" size="lg" className="shadow-sm" disabled={!readyToOutput} onClick={exportExcel}>
               {exporting ? <Loader2 className="animate-spin" /> : <FileSpreadsheet />} {exporting ? "Đang xuất…" : "Xuất Excel"}
             </Button>
           </div>
         </header>
 
-        <Card className="gap-0 overflow-visible rounded-2xl py-0 shadow-sm">
-          <form onSubmit={applyFilters} className="space-y-4 p-4 sm:p-5" aria-labelledby="report-filter-title">
+        <Card className="gap-0 overflow-visible py-0 shadow-sm">
+          <form onSubmit={applyFilters} className="space-y-3 p-4" aria-labelledby="report-filter-title">
             <div>
               <h2 id="report-filter-title" className="flex items-center gap-2 text-base font-semibold"><ListFilter className="size-4 text-primary" /> Bộ lọc</h2>
               <p className="mt-1 text-xs text-muted-foreground">Kỳ báo cáo tính theo hạn hoàn thành. Nhiệm vụ không có hạn dùng ngày giao.</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="space-y-1.5 text-sm font-medium">
-                <label htmlFor="report-period">Kỳ báo cáo</label>
+                <label className="block" htmlFor="report-period">Kỳ báo cáo</label>
                 <select id="report-period" className={selectClass} value={draft.dateFilterType} onChange={(event) => changeFilter("dateFilterType", event.target.value as ReportFilters["dateFilterType"])}>
                   <option value="MONTH">Theo tháng</option>
                   <option value="YEAR">Theo năm</option>
@@ -236,25 +235,25 @@ export default function ReportsPage() {
               )}
               {draft.dateFilterType === "YEAR" && (
                 <label className="space-y-1.5 text-sm font-medium">
-                  <span>Năm</span>
-                  <Input className="h-11" inputMode="numeric" pattern="[1-9][0-9]{3}" maxLength={4} required value={draft.year} onChange={(event) => changeFilter("year", event.target.value)} />
+                  <span className="block">Năm</span>
+                  <Input className="h-10" inputMode="numeric" pattern="[1-9][0-9]{3}" maxLength={4} required value={draft.year} onChange={(event) => changeFilter("year", event.target.value)} />
                 </label>
               )}
               {draft.dateFilterType === "CUSTOM" && (
                 <>
-                  <label className="space-y-1.5 text-sm font-medium"><span>Từ ngày</span><Input type="date" className="h-11" min="1000-01-01" max="9999-12-31" value={draft.dateFrom} onChange={(event) => changeFilter("dateFrom", event.target.value)} /></label>
-                  <label className="space-y-1.5 text-sm font-medium"><span>Đến ngày</span><Input type="date" className="h-11" min="1000-01-01" max="9999-12-31" value={draft.dateTo} onChange={(event) => changeFilter("dateTo", event.target.value)} /></label>
+                  <label className="space-y-1.5 text-sm font-medium"><span className="block">Từ ngày</span><Input type="date" className="h-10" min="1000-01-01" max="9999-12-31" value={draft.dateFrom} onChange={(event) => changeFilter("dateFrom", event.target.value)} /></label>
+                  <label className="space-y-1.5 text-sm font-medium"><span className="block">Đến ngày</span><Input type="date" className="h-10" min="1000-01-01" max="9999-12-31" value={draft.dateTo} onChange={(event) => changeFilter("dateTo", event.target.value)} /></label>
                 </>
               )}
               <div className="space-y-1.5 text-sm font-medium">
-                <label htmlFor="report-department">Đơn vị chủ trì</label>
+                <label className="block" htmlFor="report-department">Đơn vị chủ trì</label>
                 <select id="report-department" className={selectClass} value={draft.departmentId} onChange={(event) => changeFilter("departmentId", event.target.value)}>
                   <option value="">Toàn cơ quan</option>
                   {access.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                 </select>
               </div>
               <div className="space-y-1.5 text-sm font-medium">
-                <label htmlFor="report-status">Trạng thái</label>
+                <label className="block" htmlFor="report-status">Trạng thái</label>
                 <select id="report-status" className={selectClass} value={draft.statusGroup} onChange={(event) => changeFilter("statusGroup", event.target.value as ReportFilters["statusGroup"])}>
                   {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
@@ -262,20 +261,20 @@ export default function ReportsPage() {
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
               <label className="flex-1 space-y-1.5 text-sm font-medium">
-                <span>Từ khóa</span>
+                <span className="block">Từ khóa</span>
                 <span className="relative block">
-                  <Search aria-hidden="true" className="pointer-events-none absolute top-3.5 left-3 size-4 text-muted-foreground" />
-                  <Input type="search" className="h-11 pl-9" placeholder="Tên nhiệm vụ, số văn bản, đơn vị hoặc người giao" maxLength={200} value={draft.search} onChange={(event) => changeFilter("search", event.target.value)} />
+                  <Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input type="search" className="h-10 pl-9" placeholder="Tên nhiệm vụ, số văn bản, đơn vị hoặc người giao" maxLength={200} value={draft.search} onChange={(event) => changeFilter("search", event.target.value)} />
                 </span>
               </label>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" className="h-11 px-4" onClick={() => {
+                <Button type="button" variant="outline" size="lg" className="h-10 bg-card shadow-sm" onClick={() => {
                   const next = defaultFilters();
                   setDraft(next);
                   const query = reportQuery(next);
                   if (query !== request.query || reportError) loadReport(query);
                 }}>Đặt lại</Button>
-                <Button type="submit" className={cn(styles.primary, "h-11 px-4")} disabled={!hasChanges || !validRange}>Áp dụng bộ lọc</Button>
+                <Button type="submit" size="lg" className="h-10 shadow-sm" disabled={!hasChanges || !validRange}>Áp dụng bộ lọc</Button>
               </div>
             </div>
             {!validRange && <p role="alert" className="text-sm text-rose-700">{draft.dateFrom || draft.dateTo ? "Ngày bắt đầu phải trước hoặc bằng ngày kết thúc." : "Chọn ít nhất một mốc ngày."}</p>}
@@ -294,34 +293,34 @@ export default function ReportsPage() {
 
         {report && (
           <>
-            <section aria-label="Tổng hợp kết quả" className="rounded-2xl bg-foreground p-4 text-white sm:p-5">
-              <p className="mb-4 text-sm text-slate-200 wrap-anywhere">{reportScopeLabel(report.scope)}</p>
-              <dl className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4">
+            <section aria-label="Tổng hợp kết quả" className="space-y-3">
+              <p className="text-sm text-muted-foreground wrap-anywhere">{reportScopeLabel(report.scope)}</p>
+              <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
                   ["Tổng nhiệm vụ", report.summary.total],
                   ["Đã hoàn thành", report.summary.totalCompleted],
                   ["Tỷ lệ xử lý", `${report.summary.completionRate}%`],
                   ["Tỷ lệ đúng hạn", `${report.summary.onTimeRate}%`],
                 ].map(([label, value]) => (
-                  <div key={label} className="flex flex-col gap-1 border-l-2 border-[#4D7CFF] pl-3">
-                    <dt className="text-xs text-slate-200 sm:text-sm">{label}</dt>
-                    <dd className="text-2xl font-semibold tabular-nums">{value}</dd>
-                  </div>
+                  <Card key={label} className="gap-1 p-3 shadow-sm sm:p-4">
+                    <dt className="text-xs font-medium text-muted-foreground sm:text-sm">{label}</dt>
+                    <dd className="text-2xl font-bold text-foreground tabular-nums">{value}</dd>
+                  </Card>
                 ))}
               </dl>
-              <details className="mt-4 border-t border-white/15 pt-3 text-sm">
-                <summary className="w-fit cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#4D7CFF]">Chi tiết theo trạng thái</summary>
+              <details className="rounded-xl border border-border bg-card px-4 py-3 text-sm shadow-sm">
+                <summary className="w-fit cursor-pointer rounded font-medium focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">Chi tiết theo trạng thái</summary>
                 <dl className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                   {reportSummaryRows(report.summary).slice(1, 8).map(([label, value]) => (
-                    <div key={label} className="rounded-lg bg-white/10 px-3 py-2"><dt className="text-xs text-slate-200">{label}</dt><dd className="font-semibold tabular-nums">{value}</dd></div>
+                    <div key={label} className="rounded-lg bg-muted/70 px-3 py-2"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="font-semibold tabular-nums">{value}</dd></div>
                   ))}
                 </dl>
-                <p className="mt-3 text-xs text-slate-200">Tỷ lệ xử lý loại trừ nhiệm vụ đã hủy và không đánh giá. Tỷ lệ đúng hạn tính trên số nhiệm vụ đã hoàn thành.</p>
+                <p className="mt-3 text-xs text-muted-foreground">Tỷ lệ xử lý loại trừ nhiệm vụ đã hủy và không đánh giá. Tỷ lệ đúng hạn tính trên số nhiệm vụ đã hoàn thành.</p>
               </details>
             </section>
 
-            <Card className="gap-0 rounded-2xl py-0 shadow-sm">
-              <div className="border-b px-4 py-4 sm:px-5">
+            <Card className="gap-0 py-0 shadow-sm">
+              <div className="border-b px-4 py-3">
                 <h2 className="text-base font-semibold">Danh sách nhiệm vụ</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {rows.length ? `Hiển thị ${firstIndex + 1}–${firstIndex + rows.length} / ${report.tasks.length} nhiệm vụ. In và xuất gồm toàn bộ kết quả.` : "Không có nhiệm vụ phù hợp với bộ lọc."}
@@ -332,7 +331,7 @@ export default function ReportsPage() {
                   <table className="w-full text-left text-sm">
                     <thead className="bg-muted/70 text-xs text-muted-foreground">
                       <tr>
-                        <th scope="col" className="px-4 py-3 font-medium sm:px-5">Nhiệm vụ</th>
+                        <th scope="col" className="px-4 py-3 font-medium">Nhiệm vụ</th>
                         <th scope="col" className="hidden px-3 py-3 font-medium md:table-cell">Đơn vị chủ trì</th>
                         <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">Hạn hoàn thành</th>
                         <th scope="col" className="hidden px-3 py-3 font-medium lg:table-cell">Hoàn thành thực tế</th>
@@ -342,8 +341,8 @@ export default function ReportsPage() {
                     <tbody className="divide-y">
                       {rows.map((task) => (
                         <tr key={task.id} className="hover:bg-muted/35">
-                          <td className="min-w-0 px-4 py-2.5 sm:px-5">
-                            <button type="button" className="min-h-11 rounded text-left font-semibold text-primary wrap-anywhere hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring" onClick={() => setSelectedTask(task)}>{task.title}</button>
+                          <td className="min-w-0 px-4 py-2.5">
+                            <button type="button" className="min-h-11 rounded text-left font-medium text-foreground wrap-anywhere hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring sm:min-h-0" onClick={() => setSelectedTask(task)}>{task.title}</button>
                             <p className="text-xs text-muted-foreground wrap-anywhere">{task.documentNumber || "—"}</p>
                             <p className="text-xs text-muted-foreground wrap-anywhere md:hidden">{task.ownerDepartmentName}</p>
                           </td>
@@ -358,11 +357,11 @@ export default function ReportsPage() {
                 </div>
               )}
               {totalPages > 1 && (
-                <nav aria-label="Phân trang báo cáo" className="flex items-center justify-between gap-3 border-t px-4 py-3 sm:px-5">
+                <nav aria-label="Phân trang báo cáo" className="flex items-center justify-between gap-3 border-t px-4 py-3">
                   <span className="text-sm text-muted-foreground">Trang {page} / {totalPages}</span>
                   <div className="flex gap-2">
-                    <Button variant="outline" className="size-11" size="icon" aria-label="Trang trước" disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft /></Button>
-                    <Button variant="outline" className="size-11" size="icon" aria-label="Trang sau" disabled={page === totalPages} onClick={() => setPage(page + 1)}><ChevronRight /></Button>
+                    <Button variant="outline" className="size-11 sm:size-8" size="icon" aria-label="Trang trước" disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft /></Button>
+                    <Button variant="outline" className="size-11 sm:size-8" size="icon" aria-label="Trang sau" disabled={page === totalPages} onClick={() => setPage(page + 1)}><ChevronRight /></Button>
                   </div>
                 </nav>
               )}
