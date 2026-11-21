@@ -1,4 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
+import * as ExcelJS from 'exceljs';
+import type { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   calculateTaskStatus,
@@ -8,8 +11,6 @@ import {
   TaskStatus,
 } from '../tasks/status';
 import { ReportQueryDto } from './dto/report-query.dto';
-import * as ExcelJS from 'exceljs';
-import { Response } from 'express';
 
 export interface ReportTaskItem {
   id: string;
@@ -33,121 +34,215 @@ export interface ReportTaskItem {
   directives: string[];
 }
 
-export interface ReportSummaryStats {
-  total: number;
-  completedEarly: number;
-  completedOnTime: number;
-  completedLate: number;
-  totalCompleted: number;
-  inProgress: number;
-  incomplete: number;
-  cancelled: number;
-  noEvaluation: number;
-  completionRate: number;
+const COMPLETED_STATUSES: readonly TaskStatus[] = [
+  'COMPLETED_EARLY',
+  'COMPLETED_ON_TIME',
+  'COMPLETED_LATE',
+];
+
+const reportDateFormat = new Intl.DateTimeFormat('vi-VN', {
+  timeZone: 'Asia/Ho_Chi_Minh',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+function parseReportDay(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = organizationDateStart(year, month, day);
+  if (!Number.isFinite(date.getTime())) {
+    throw new BadRequestException('Ngày lọc báo cáo không hợp lệ.');
+  }
+  const actual = organizationDateParts(date);
+  if (actual.year !== year || actual.month !== month || actual.day !== day) {
+    throw new BadRequestException('Ngày lọc báo cáo không hợp lệ.');
+  }
+  return { date, nextDay: organizationDateStart(year, month, day + 1) };
+}
+
+function buildPeriod(
+  dto: ReportQueryDto,
+  now: Date,
+): {
+  label: string;
+  range?: { gte?: Date; lt?: Date };
+} {
+  const { dateFilterType = 'ALL', year, month, dateFrom, dateTo } = dto;
+
+  if (dateFilterType === 'ALL') return { label: 'Toàn thời gian' };
+
+  if (dateFilterType === 'YEAR') {
+    const targetYear = year ? Number(year) : organizationDateParts(now).year;
+    return {
+      label: `Năm ${targetYear}`,
+      range: {
+        gte: organizationDateStart(targetYear, 1, 1),
+        lt: organizationDateStart(targetYear + 1, 1, 1),
+      },
+    };
+  }
+
+  if (dateFilterType === 'MONTH') {
+    const today = organizationDateParts(now);
+    const [targetYear, targetMonth] = month
+      ? month.split('-').map(Number)
+      : [today.year, today.month];
+    return {
+      label: `Tháng ${targetMonth}/${targetYear}`,
+      range: {
+        gte: organizationDateStart(targetYear, targetMonth, 1),
+        lt: organizationDateStart(targetYear, targetMonth + 1, 1),
+      },
+    };
+  }
+
+  const start = dateFrom ? parseReportDay(dateFrom) : undefined;
+  const end = dateTo ? parseReportDay(dateTo) : undefined;
+  if (!start && !end) {
+    throw new BadRequestException('Chọn ngày bắt đầu hoặc ngày kết thúc.');
+  }
+  if (start && end && start.date > end.date) {
+    throw new BadRequestException(
+      'Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.',
+    );
+  }
+  return {
+    label: [
+      start && `Từ ${reportDateFormat.format(start.date)}`,
+      end && `${start ? 'đến' : 'Đến'} ${reportDateFormat.format(end.date)}`,
+    ]
+      .filter(Boolean)
+      .join(' '),
+    range: {
+      ...(start && { gte: start.date }),
+      ...(end && { lt: end.nextDay }),
+    },
+  };
+}
+
+function summarize(tasks: ReportTaskItem[]) {
+  const count = (status: TaskStatus) =>
+    tasks.filter((task) => task.status === status).length;
+  const total = tasks.length;
+  const completedEarly = count('COMPLETED_EARLY');
+  const completedOnTime = count('COMPLETED_ON_TIME');
+  const completedLate = count('COMPLETED_LATE');
+  const totalCompleted = completedEarly + completedOnTime + completedLate;
+  const cancelled = count('CANCELLED');
+  const noEvaluation = count('NO_EVALUATION');
+  const eligible = total - cancelled - noEvaluation;
+  return {
+    total,
+    completedEarly,
+    completedOnTime,
+    completedLate,
+    totalCompleted,
+    inProgress: count('IN_PROGRESS'),
+    incomplete: count('INCOMPLETE'),
+    cancelled,
+    noEvaluation,
+    completionRate:
+      eligible > 0 ? Math.round((totalCompleted / eligible) * 100) : 0,
+    onTimeRate:
+      totalCompleted > 0
+        ? Math.round(
+            ((completedEarly + completedOnTime) / totalCompleted) * 100,
+          )
+        : 0,
+  };
 }
 
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  private buildDateRange(dto: ReportQueryDto): { startDate: Date; endDate: Date } | null {
-    const { dateFilterType = 'ALL', year, month, dateFrom, dateTo } = dto;
-
-    if (dateFilterType === 'ALL') {
-      return null;
-    }
-
-    if (dateFilterType === 'YEAR') {
-      const targetYear = Number(year) || new Date().getFullYear();
-      const startDate = organizationDateStart(targetYear, 1, 1);
-      const endDate = new Date(organizationDateStart(targetYear + 1, 1, 1).getTime() - 1);
-      return { startDate, endDate };
-    }
-
-    if (dateFilterType === 'MONTH') {
-      let targetYear: number;
-      let targetMonth: number;
-      if (month && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-        [targetYear, targetMonth] = month.split('-').map(Number);
-      } else {
-        const today = organizationDateParts(new Date());
-        targetYear = today.year;
-        targetMonth = today.month;
-      }
-      const startDate = organizationDateStart(targetYear, targetMonth, 1);
-      const endDate = new Date(organizationDateStart(targetYear, targetMonth + 1, 1).getTime() - 1);
-      return { startDate, endDate };
-    }
-
-    if (dateFilterType === 'CUSTOM') {
-      if (!dateFrom && !dateTo) {
-        return null;
-      }
-      const startDate = dateFrom ? new Date(`${dateFrom}T00:00:00.000Z`) : new Date('1970-01-01');
-      const endDate = dateTo ? new Date(`${dateTo}T23:59:59.999Z`) : new Date('2099-12-31');
-      return { startDate, endDate };
-    }
-
-    return null;
-  }
-
-  private getOfficialStatus(task: {
-    isCancelled: boolean;
-    requiredCompletionDate: Date | null;
-    actualCompletionDate: Date | null;
-    approvedStatus: string | null;
-  }): TaskStatus {
+  private getOfficialStatus(
+    task: {
+      isCancelled: boolean;
+      requiredCompletionDate: Date | null;
+      actualCompletionDate: Date | null;
+      approvedStatus: string | null;
+    },
+    now: Date,
+  ): TaskStatus {
     if (task.isCancelled) return 'CANCELLED';
-    return (task.approvedStatus as TaskStatus) ?? calculateTaskStatus(task);
+    return (
+      (task.approvedStatus as TaskStatus) ??
+      calculateTaskStatus({ ...task, now })
+    );
   }
 
   async getReportData(dto: ReportQueryDto) {
-    const dateRange = this.buildDateRange(dto);
-    const where: any = {};
+    const now = new Date();
+    const period = buildPeriod(dto, now);
+    const where: Prisma.TaskWhereInput = {
+      ownerDepartmentId: dto.departmentId || undefined,
+    };
 
-    if (dateRange) {
+    if (period.range) {
       where.OR = [
-        {
-          requiredCompletionDate: {
-            gte: dateRange.startDate,
-            lte: dateRange.endDate,
-          },
-        },
-        {
-          requiredCompletionDate: null,
-          assignedDate: {
-            gte: dateRange.startDate,
-            lte: dateRange.endDate,
-          },
-        },
+        { requiredCompletionDate: period.range },
+        { requiredCompletionDate: null, assignedDate: period.range },
       ];
     }
 
-    if (dto.departmentId) {
-      where.ownerDepartmentId = dto.departmentId;
+    const search = dto.search?.trim() ?? '';
+    if (search) {
+      const match = { contains: search, mode: 'insensitive' } as const;
+      where.AND = {
+        OR: [
+          { title: match },
+          { content: match },
+          { documentNumber: match },
+          { ownerDepartment: { name: match } },
+          { assignedBy: match },
+        ],
+      };
     }
 
-    const tasks = await this.prisma.task.findMany({
-      where,
-      include: {
-        ownerDepartment: {
-          select: { id: true, name: true, code: true },
+    const [records, department] = await Promise.all([
+      this.prisma.task.findMany({
+        where,
+        include: {
+          ownerDepartment: { select: { name: true } },
+          feedbacks: {
+            where: { type: 'DIRECTIVE' },
+            select: { content: true },
+            orderBy: { createdAt: 'desc' },
+          },
         },
-        feedbacks: {
-          where: { type: 'DIRECTIVE' },
-          select: { content: true },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-      orderBy: [
-        { requiredCompletionDate: 'asc' },
-        { assignedDate: 'desc' },
-      ],
-    });
+        orderBy: [
+          { requiredCompletionDate: 'asc' },
+          { assignedDate: 'desc' },
+          { id: 'asc' },
+        ],
+      }),
+      dto.departmentId
+        ? this.prisma.department.findUnique({
+            where: { id: dto.departmentId },
+            select: { name: true },
+          })
+        : null,
+    ]);
 
-    const enrichedTasks: ReportTaskItem[] = tasks.map((task) => {
-      const status = this.getOfficialStatus(task);
-      return {
+    if (dto.departmentId && !department) {
+      throw new BadRequestException('Đơn vị đã chọn không tồn tại.');
+    }
+
+    const statusGroup = dto.statusGroup ?? 'ALL';
+    const tasks: ReportTaskItem[] = [];
+    for (const task of records) {
+      const status = this.getOfficialStatus(task, now);
+      if (statusGroup === 'COMPLETED' && !COMPLETED_STATUSES.includes(status))
+        continue;
+      if (
+        statusGroup !== 'ALL' &&
+        statusGroup !== 'COMPLETED' &&
+        statusGroup !== status
+      )
+        continue;
+
+      tasks.push({
         id: task.id,
         taskCode: task.taskCode,
         title: task.title,
@@ -155,7 +250,7 @@ export class ReportsService {
         documentNumber: task.documentNumber,
         priority: task.priority,
         ownerDepartmentId: task.ownerDepartmentId,
-        ownerDepartmentName: task.ownerDepartment?.name || 'Chưa phân công',
+        ownerDepartmentName: task.ownerDepartment.name,
         coordinatingUnits: task.coordinatingUnits,
         assignedDate: task.assignedDate,
         assignedBy: task.assignedBy,
@@ -166,100 +261,51 @@ export class ReportsService {
         completionEvidence: task.completionEvidence,
         incompleteReason: task.incompleteReason,
         isFinalized: task.isFinalized,
-        directives: task.feedbacks.map((f) => f.content),
-      };
-    });
-
-    // Compute Summary for the period/department
-    let completedEarly = 0;
-    let completedOnTime = 0;
-    let completedLate = 0;
-    let inProgress = 0;
-    let incomplete = 0;
-    let cancelled = 0;
-    let noEvaluation = 0;
-
-    for (const t of enrichedTasks) {
-      switch (t.status) {
-        case 'COMPLETED_EARLY':
-          completedEarly++;
-          break;
-        case 'COMPLETED_ON_TIME':
-          completedOnTime++;
-          break;
-        case 'COMPLETED_LATE':
-          completedLate++;
-          break;
-        case 'IN_PROGRESS':
-          inProgress++;
-          break;
-        case 'INCOMPLETE':
-          incomplete++;
-          break;
-        case 'CANCELLED':
-          cancelled++;
-          break;
-        case 'NO_EVALUATION':
-          noEvaluation++;
-          break;
-      }
-    }
-
-    const total = enrichedTasks.length;
-    const totalCompleted = completedEarly + completedOnTime + completedLate;
-    const completionRate = total > 0 ? Math.round((totalCompleted / (total - cancelled || 1)) * 100) : 0;
-
-    const summary: ReportSummaryStats = {
-      total,
-      completedEarly,
-      completedOnTime,
-      completedLate,
-      totalCompleted,
-      inProgress,
-      incomplete,
-      cancelled,
-      noEvaluation,
-      completionRate,
-    };
-
-    // Filter by statusGroup if specified
-    let filteredTasks = enrichedTasks;
-    if (dto.statusGroup && dto.statusGroup !== 'ALL') {
-      if (dto.statusGroup === 'COMPLETED') {
-        filteredTasks = enrichedTasks.filter((t) =>
-          ['COMPLETED_EARLY', 'COMPLETED_ON_TIME', 'COMPLETED_LATE'].includes(t.status),
-        );
-      } else if (dto.statusGroup === 'IN_PROGRESS') {
-        filteredTasks = enrichedTasks.filter((t) => t.status === 'IN_PROGRESS');
-      } else if (dto.statusGroup === 'INCOMPLETE') {
-        filteredTasks = enrichedTasks.filter((t) => t.status === 'INCOMPLETE');
-      } else if (dto.statusGroup === 'CANCELLED') {
-        filteredTasks = enrichedTasks.filter((t) => t.status === 'CANCELLED');
-      }
+        directives: task.feedbacks.map((feedback) => feedback.content),
+      });
     }
 
     return {
-      summary,
-      tasks: filteredTasks,
+      summary: summarize(tasks),
+      tasks,
+      scope: {
+        period: period.label,
+        department: department?.name ?? 'Toàn cơ quan',
+        status:
+          statusGroup === 'ALL'
+            ? 'Tất cả trạng thái'
+            : statusGroup === 'COMPLETED'
+              ? 'Đã hoàn thành'
+              : getStatusLabel(statusGroup),
+        search,
+      },
     };
   }
 
   async exportExcel(dto: ReportQueryDto, res: Response) {
-    const { summary, tasks } = await this.getReportData(dto);
+    const { summary, tasks, scope } = await this.getReportData(dto);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Hệ thống Quản lý Nhiệm vụ GTTM';
     workbook.created = new Date();
 
+    const tableHeaderRowIndex = 10;
     const sheet = workbook.addWorksheet('Báo cáo nhiệm vụ', {
-      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
-      views: [{ showGridLines: true }],
+      pageSetup: {
+        paperSize: 9,
+        orientation: 'landscape',
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        printTitlesRow: `${tableHeaderRowIndex}:${tableHeaderRowIndex}`,
+      },
+      views: [{ showGridLines: false }],
     });
 
     // 1. Header Section
     sheet.mergeCells('A1:C1');
     const orgCell = sheet.getCell('A1');
-    orgCell.value = 'HỆ THỐNG QUẢN LÝ NHIỆM VỤ GTTM';
+    orgCell.value = 'CỤC ĐƯỜNG BỘ VIỆT NAM';
     orgCell.font = { name: 'Times New Roman', size: 11, bold: true };
     orgCell.alignment = { horizontal: 'left', vertical: 'middle' };
 
@@ -279,27 +325,48 @@ export class ReportsService {
     sheet.mergeCells('A4:J4');
     const titleCell = sheet.getCell('A4');
     titleCell.value = 'BÁO CÁO THEO DÕI VÀ ĐÁNH GIÁ THỰC HIỆN NHIỆM VỤ';
-    titleCell.font = { name: 'Times New Roman', size: 16, bold: true, color: { argb: 'FF1E3A8A' } };
+    titleCell.font = {
+      name: 'Times New Roman',
+      size: 16,
+      bold: true,
+      color: { argb: 'FF1E3A8A' },
+    };
     titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
 
     // Period Description
-    let periodText = 'Thời gian: Toàn thời gian';
-    if (dto.dateFilterType === 'YEAR') {
-      periodText = `Thời gian: Năm ${dto.year || new Date().getFullYear()}`;
-    } else if (dto.dateFilterType === 'MONTH') {
-      periodText = `Thời gian: Tháng ${dto.month || ''}`;
-    } else if (dto.dateFilterType === 'CUSTOM') {
-      periodText = `Thời gian: Từ ${dto.dateFrom || '...'} đến ${dto.dateTo || '...'}`;
-    }
-
     sheet.mergeCells('A5:J5');
     const periodCell = sheet.getCell('A5');
-    periodCell.value = periodText;
+    periodCell.value = `Kỳ báo cáo: ${scope.period} · Đơn vị: ${scope.department} · Trạng thái: ${scope.status}`;
     periodCell.font = { name: 'Times New Roman', size: 11, italic: true };
-    periodCell.alignment = { horizontal: 'center', vertical: 'middle' };
+    periodCell.alignment = {
+      horizontal: 'center',
+      vertical: 'middle',
+      wrapText: true,
+    };
+    sheet.getRow(5).height = 26;
+    if (scope.search) {
+      sheet.mergeCells('A6:J6');
+      const searchCell = sheet.getCell('A6');
+      searchCell.value = `Từ khóa: ${scope.search}`;
+      searchCell.font = periodCell.font;
+      searchCell.alignment = periodCell.alignment;
+      sheet.getRow(6).height = 30;
+    }
 
     // 3. Summary Stats Table
-    sheet.getRow(7).values = ['Tổng số nhiệm vụ', 'Hoàn thành trước hạn', 'Hoàn thành đúng hạn', 'Hoàn thành quá hạn', 'Đang thực hiện', 'Không hoàn thành', 'Đã hủy', 'Tỷ lệ hoàn thành'];
+    const summaryHeaders = [
+      'Tổng số',
+      'Trước hạn',
+      'Đúng hạn',
+      'Quá hạn đã xong',
+      'Đang thực hiện',
+      'Không hoàn thành',
+      'Đã hủy',
+      'Không đánh giá',
+      'Tỷ lệ xử lý',
+      'Tỷ lệ đúng hạn',
+    ];
+    sheet.getRow(7).values = summaryHeaders;
     sheet.getRow(8).values = [
       summary.total,
       summary.completedEarly,
@@ -308,29 +375,60 @@ export class ReportsService {
       summary.inProgress,
       summary.incomplete,
       summary.cancelled,
-      `${summary.completionRate}%`,
+      summary.noEvaluation,
+      summary.completionRate / 100,
+      summary.onTimeRate / 100,
     ];
+    sheet.getCell('I8').numFmt = '0%';
+    sheet.getCell('J8').numFmt = '0%';
 
     const sumHeaderRow = sheet.getRow(7);
-    sumHeaderRow.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
-    for (let c = 1; c <= 8; c++) {
+    sumHeaderRow.height = 28;
+    sumHeaderRow.font = {
+      name: 'Times New Roman',
+      size: 10,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
+    for (let c = 1; c <= summaryHeaders.length; c++) {
       const cell = sumHeaderRow.getCell(c);
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4F46E5' },
+      };
+      cell.alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+        wrapText: true,
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
     }
 
     const sumValRow = sheet.getRow(8);
     sumValRow.font = { name: 'Times New Roman', size: 11, bold: true };
-    for (let c = 1; c <= 8; c++) {
+    for (let c = 1; c <= summaryHeaders.length; c++) {
       const cell = sumValRow.getCell(c);
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
-      cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF3F4F6' },
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
     }
 
     // 4. Detailed Tasks Table
-    const tableHeaderRowIndex = 10;
     const headers = [
       'STT',
       'Số văn bản',
@@ -346,13 +444,26 @@ export class ReportsService {
 
     sheet.getRow(tableHeaderRowIndex).values = headers;
     const tableHeader = sheet.getRow(tableHeaderRowIndex);
-    tableHeader.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    tableHeader.font = {
+      name: 'Times New Roman',
+      size: 11,
+      bold: true,
+      color: { argb: 'FFFFFFFF' },
+    };
     tableHeader.height = 28;
 
     for (let col = 1; col <= headers.length; col++) {
       const cell = tableHeader.getCell(col);
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
-      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF1F2937' },
+      };
+      cell.alignment = {
+        horizontal: 'center',
+        vertical: 'middle',
+        wrapText: true,
+      };
       cell.border = {
         top: { style: 'medium' },
         left: { style: 'thin' },
@@ -362,11 +473,8 @@ export class ReportsService {
     }
 
     // Populate task rows
-    const formatDate = (date: Date | null) => {
-      if (!date) return '-';
-      const d = new Date(date);
-      return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
-    };
+    const formatDate = (date: Date | null) =>
+      date ? reportDateFormat.format(date) : '-';
 
     tasks.forEach((task, idx) => {
       const rowIdx = tableHeaderRowIndex + 1 + idx;
@@ -374,13 +482,15 @@ export class ReportsService {
       row.values = [
         idx + 1,
         task.documentNumber || '-',
-        task.title,
+        [task.title, task.content].filter(Boolean).join('\n'),
         task.ownerDepartmentName,
         task.coordinatingUnits || '-',
         formatDate(task.requiredCompletionDate),
         formatDate(task.actualCompletionDate),
         task.statusLabel,
-        task.completionEvidence || task.incompleteReason || '-',
+        [task.completionEvidence, task.incompleteReason]
+          .filter(Boolean)
+          .join('\n') || '-',
         task.directives.join('\n') || '-',
       ];
 
@@ -410,34 +520,54 @@ export class ReportsService {
       // Status color highlights
       const statusCell = row.getCell(8);
       if (['COMPLETED_EARLY', 'COMPLETED_ON_TIME'].includes(task.status)) {
-        statusCell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FF15803D' } };
+        statusCell.font = {
+          name: 'Times New Roman',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF15803D' },
+        };
       } else if (task.status === 'COMPLETED_LATE') {
-        statusCell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FFC2410C' } };
+        statusCell.font = {
+          name: 'Times New Roman',
+          size: 10,
+          bold: true,
+          color: { argb: 'FFC2410C' },
+        };
       } else if (task.status === 'INCOMPLETE' || task.status === 'CANCELLED') {
-        statusCell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FFB91C1C' } };
+        statusCell.font = {
+          name: 'Times New Roman',
+          size: 10,
+          bold: true,
+          color: { argb: 'FFB91C1C' },
+        };
       } else if (task.status === 'IN_PROGRESS') {
-        statusCell.font = { name: 'Times New Roman', size: 10, bold: true, color: { argb: 'FF1D4ED8' } };
+        statusCell.font = {
+          name: 'Times New Roman',
+          size: 10,
+          bold: true,
+          color: { argb: 'FF1D4ED8' },
+        };
       }
     });
 
     // Column Widths — dùng getColumn() để tránh ExcelJS reset rows khi set sheet.columns sau
-    sheet.getColumn(1).width = 6;   // STT
-    sheet.getColumn(2).width = 16;  // Số VB
-    sheet.getColumn(3).width = 40;  // Nội dung
-    sheet.getColumn(4).width = 22;  // Đơn vị chủ trì
-    sheet.getColumn(5).width = 20;  // Phối hợp
-    sheet.getColumn(6).width = 14;  // Hạn HT
-    sheet.getColumn(7).width = 14;  // Thực tế HT
-    sheet.getColumn(8).width = 18;  // Trạng thái
-    sheet.getColumn(9).width = 28;  // Tiến độ/Bằng chứng
+    sheet.getColumn(1).width = 6; // STT
+    sheet.getColumn(2).width = 16; // Số VB
+    sheet.getColumn(3).width = 40; // Nội dung
+    sheet.getColumn(4).width = 22; // Đơn vị chủ trì
+    sheet.getColumn(5).width = 20; // Phối hợp
+    sheet.getColumn(6).width = 14; // Hạn HT
+    sheet.getColumn(7).width = 14; // Thực tế HT
+    sheet.getColumn(8).width = 18; // Trạng thái
+    sheet.getColumn(9).width = 28; // Tiến độ/Bằng chứng
     sheet.getColumn(10).width = 25; // Ý kiến chỉ đạo
 
     // Signatures
     const finalRowIdx = tableHeaderRowIndex + tasks.length + 3;
     sheet.mergeCells(`H${finalRowIdx}:J${finalRowIdx}`);
     const signDateCell = sheet.getCell(`H${finalRowIdx}`);
-    const today = new Date();
-    signDateCell.value = `Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`;
+    const { day, month, year } = organizationDateParts(workbook.created);
+    signDateCell.value = `Ngày ${day} tháng ${month} năm ${year}`;
     signDateCell.font = { name: 'Times New Roman', size: 11, italic: true };
     signDateCell.alignment = { horizontal: 'center' };
 
@@ -455,7 +585,10 @@ export class ReportsService {
 
     // Write to stream
     const fileName = `Bao_cao_nhiem_vu_${Date.now()}.xlsx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
     await workbook.xlsx.write(res);
