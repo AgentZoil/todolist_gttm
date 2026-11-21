@@ -17,15 +17,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api";
-
-interface UserInfo {
-  role: string;
-}
+import { getReportAccess, type ReportIdentity } from "@/lib/report-access";
 
 const allNavItems = [
   { label: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
   { label: "Nhiệm vụ", href: "/tasks", icon: ListTodo },
-  { label: "Báo cáo", href: "/reports", icon: FileSpreadsheet, roles: ["ADMIN"] },
+  { label: "Báo cáo", href: "/reports", icon: FileSpreadsheet, access: getReportAccess },
   { label: "Phòng ban/Đơn vị", href: "/departments", icon: Building2 },
   { label: "Người dùng", href: "/users", icon: Users, roles: ["ADMIN", "SECRETARY"] },
   { label: "Khóa tháng", href: "/period-locks", icon: Lock, roles: ["ADMIN"] },
@@ -34,18 +31,19 @@ const allNavItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [user, setUser] = useState<ReportIdentity | null>(null);
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    apiFetch<{ data: UserInfo }>("/auth/me")
-      .then((res) => setUserRole(res.data.role))
+    apiFetch<{ data: ReportIdentity }>("/auth/me")
+      .then((res) => setUser(res.data))
       .catch(() => {});
   }, []);
 
-  const navItems = allNavItems.filter(
-    (item) => !item.roles || (userRole && item.roles.includes(userRole))
-  );
+  const navItems = allNavItems.filter((item) => {
+    if (item.access) return item.access(user) !== null;
+    return !item.roles || (user && item.roles.includes(user.role));
+  });
 
   return (
     <aside

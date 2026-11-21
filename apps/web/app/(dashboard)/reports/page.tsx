@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { MonthPicker } from "@/components/ui/month-picker";
 import { apiDownload, apiFetch } from "@/lib/api";
+import { getReportAccess, type ReportIdentity } from "@/lib/report-access";
 import { cn } from "@/lib/utils";
 import {
   defaultFilters, formatReportDate, reportQuery, reportScopeLabel, reportSummaryRows, STATUS_OPTIONS,
@@ -14,7 +15,7 @@ import {
 } from "./report-data";
 import { ReportPrint } from "./report-print";
 
-interface UserInfo { role: string; fullName: string }
+interface UserInfo extends ReportIdentity { fullName: string; departmentName?: string }
 interface Department { id: string; name: string }
 type Access = { user: UserInfo; departments: Department[] } | { error: string };
 type ReportRequest = { query: string };
@@ -105,7 +106,7 @@ export default function ReportsPage() {
     async function loadAccess() {
       try {
         const { data: user } = await apiFetch<{ data: UserInfo }>("/auth/me", { signal });
-        const departments = user.role === "ADMIN"
+        const departments = getReportAccess(user) === "all"
           ? (await apiFetch<{ data: Department[] }>("/departments", { signal })).data
           : [];
         if (!signal.aborted) setAccess({ user, departments });
@@ -119,12 +120,20 @@ export default function ReportsPage() {
     return () => controller.abort();
   }, [accessRevision]);
 
-  const authorized = !!access && "user" in access && access.user.role === "ADMIN";
+  const user = access && "user" in access ? access.user : null;
+  const reportAccess = getReportAccess(user);
+  const authorized = reportAccess !== null;
+  const scopedParams = new URLSearchParams(request.query);
+  if (reportAccess === "department" && user?.departmentId) {
+    scopedParams.set("departmentId", user.departmentId);
+  }
+  const scopedQuery = scopedParams.toString();
+
   useEffect(() => {
     if (!authorized) return;
     const controller = new AbortController();
     const { signal } = controller;
-    apiFetch<ReportData>(`/reports/tasks?${request.query}`, { signal })
+    apiFetch<ReportData>(`/reports/tasks?${scopedQuery}`, { signal })
       .then((report) => {
         if (!signal.aborted) setResult({ request, report });
       })
@@ -132,7 +141,7 @@ export default function ReportsPage() {
         if (!signal.aborted) setResult({ request, error: error instanceof Error ? error.message : "Không tải được báo cáo." });
       });
     return () => controller.abort();
-  }, [authorized, request]);
+  }, [authorized, request, scopedQuery]);
 
   const activeResult = result?.request === request ? result : null;
   const report = activeResult && "report" in activeResult ? activeResult.report : null;
@@ -168,7 +177,7 @@ export default function ReportsPage() {
     setExporting(true);
     setExportError("");
     try {
-      await apiDownload(`/reports/tasks/export?${request.query}`);
+      await apiDownload(`/reports/tasks/export?${scopedQuery}`);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : "Không xuất được báo cáo Excel.");
     } finally {
@@ -186,13 +195,17 @@ export default function ReportsPage() {
     );
   }
 
-  // Phase 1 restriction: ADMIN only
+  // Access follows the user's role and assigned department.
   if (!authorized) {
     return (
       <Card className="mx-auto max-w-lg items-center p-8 text-center">
         <ShieldAlert className="size-8 text-destructive" />
         <h1 className="text-xl font-semibold">Giới hạn quyền truy cập</h1>
-        <p className="text-sm text-muted-foreground">Báo cáo dành cho quản trị viên.</p>
+        <p className="text-sm text-muted-foreground">
+          {access.user.role === "DEPARTMENT_EDITOR"
+            ? "Tài khoản chưa được gắn đơn vị. Vui lòng liên hệ quản trị viên."
+            : "Tài khoản của bạn chưa có quyền xem báo cáo."}
+        </p>
       </Card>
     );
   }
@@ -245,13 +258,22 @@ export default function ReportsPage() {
                   <label className="space-y-1.5 text-sm font-medium"><span className="block">Đến ngày</span><Input type="date" className="h-10" min="1000-01-01" max="9999-12-31" value={draft.dateTo} onChange={(event) => changeFilter("dateTo", event.target.value)} /></label>
                 </>
               )}
-              <div className="space-y-1.5 text-sm font-medium">
-                <label className="block" htmlFor="report-department">Đơn vị chủ trì</label>
-                <select id="report-department" className={selectClass} value={draft.departmentId} onChange={(event) => changeFilter("departmentId", event.target.value)}>
-                  <option value="">Toàn cơ quan</option>
-                  {access.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                </select>
-              </div>
+              {reportAccess === "all" ? (
+                <div className="space-y-1.5 text-sm font-medium">
+                  <label className="block" htmlFor="report-department">Đơn vị chủ trì</label>
+                  <select id="report-department" className={selectClass} value={draft.departmentId} onChange={(event) => changeFilter("departmentId", event.target.value)}>
+                    <option value="">Toàn cơ quan</option>
+                    {access.departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                  </select>
+                </div>
+              ) : (
+                <dl className="space-y-1.5 text-sm">
+                  <dt className="font-medium">Đơn vị chủ trì</dt>
+                  <dd className="flex min-h-10 items-center rounded-lg border border-border bg-muted/50 px-3 py-1.5 wrap-anywhere">
+                    {report?.scope.department ?? access.user.departmentName ?? "Đơn vị của bạn"}
+                  </dd>
+                </dl>
+              )}
               <div className="space-y-1.5 text-sm font-medium">
                 <label className="block" htmlFor="report-status">Trạng thái</label>
                 <select id="report-status" className={selectClass} value={draft.statusGroup} onChange={(event) => changeFilter("statusGroup", event.target.value as ReportFilters["statusGroup"])}>

@@ -1,7 +1,12 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import * as ExcelJS from 'exceljs';
 import type { Response } from 'express';
+import type { CurrentUser } from '../auth/current-user.type';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   calculateTaskStatus,
@@ -152,6 +157,29 @@ function summarize(tasks: ReportTaskItem[]) {
   };
 }
 
+type ReportUser = Pick<CurrentUser, 'role' | 'departmentId'>;
+
+function resolveDepartment(
+  requestedDepartmentId: string | undefined,
+  user: ReportUser,
+): string | undefined {
+  if (user.role === 'ADMIN' || user.role === 'SECRETARY') {
+    return requestedDepartmentId || undefined;
+  }
+  if (user.role !== 'DEPARTMENT_EDITOR') {
+    throw new ForbiddenException('Bạn không có quyền xem báo cáo.');
+  }
+  if (!user.departmentId) {
+    throw new ForbiddenException('Tài khoản phòng ban chưa được gắn đơn vị.');
+  }
+  if (requestedDepartmentId && requestedDepartmentId !== user.departmentId) {
+    throw new ForbiddenException(
+      'Bạn chỉ được xem và xuất báo cáo của đơn vị mình.',
+    );
+  }
+  return user.departmentId;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -172,11 +200,12 @@ export class ReportsService {
     );
   }
 
-  async getReportData(dto: ReportQueryDto) {
+  async getReportData(dto: ReportQueryDto, user: ReportUser) {
+    const departmentId = resolveDepartment(dto.departmentId, user);
     const now = new Date();
     const period = buildPeriod(dto, now);
     const where: Prisma.TaskWhereInput = {
-      ownerDepartmentId: dto.departmentId || undefined,
+      ownerDepartmentId: departmentId,
     };
 
     if (period.range) {
@@ -217,15 +246,15 @@ export class ReportsService {
           { id: 'asc' },
         ],
       }),
-      dto.departmentId
+      departmentId
         ? this.prisma.department.findUnique({
-            where: { id: dto.departmentId },
+            where: { id: departmentId },
             select: { name: true },
           })
         : null,
     ]);
 
-    if (dto.departmentId && !department) {
+    if (departmentId && !department) {
       throw new BadRequestException('Đơn vị đã chọn không tồn tại.');
     }
 
@@ -282,8 +311,8 @@ export class ReportsService {
     };
   }
 
-  async exportExcel(dto: ReportQueryDto, res: Response) {
-    const { summary, tasks, scope } = await this.getReportData(dto);
+  async exportExcel(dto: ReportQueryDto, user: ReportUser, res: Response) {
+    const { summary, tasks, scope } = await this.getReportData(dto, user);
 
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'Hệ thống Quản lý Nhiệm vụ GTTM';

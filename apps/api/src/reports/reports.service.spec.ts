@@ -12,6 +12,22 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { PrismaService } from '../prisma/prisma.service';
 
+async function readExport(testRequest: request.Test) {
+  const response = await testRequest
+    .buffer(true)
+    .parse((response, callback) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => callback(null, Buffer.concat(chunks)));
+      response.on('error', (error: Error) => callback(error, null));
+    })
+    .expect(200)
+    .expect('Content-Type', /spreadsheetml/);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(response.body);
+  return workbook.worksheets[0];
+}
+
 describe('ReportsService', () => {
   let service: ReportsService;
   let prisma: any;
@@ -57,7 +73,10 @@ describe('ReportsService', () => {
   });
 
   it('should return report data with summary', async () => {
-    const result = await service.getReportData({ dateFilterType: 'ALL' });
+    const result = await service.getReportData(
+      { dateFilterType: 'ALL' },
+      { role: 'ADMIN', departmentId: null },
+    );
     expect(result.summary.total).toBe(1);
     expect(result.summary.completedEarly).toBe(1);
     expect(result.summary.completionRate).toBe(100);
@@ -98,9 +117,7 @@ describe('Reports HTTP endpoints', () => {
     title: `Kiểm tra cầu ${index + 1}`,
   }));
   const findMany = jest.fn();
-  const findDepartment = jest
-    .fn()
-    .mockResolvedValue({ name: 'Phòng Kỹ thuật' });
+  const findDepartment = jest.fn();
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -120,7 +137,10 @@ describe('Reports HTTP endpoints', () => {
       .useValue({
         canActivate(context: ExecutionContext) {
           const req = context.switchToHttp().getRequest();
-          req.currentUser = { role: req.headers['x-test-role'] ?? 'ADMIN' };
+          req.currentUser = {
+            role: req.headers['x-test-role'] ?? 'ADMIN',
+            departmentId: req.headers['x-test-department'] ?? null,
+          };
           return true;
         },
       })
@@ -134,20 +154,18 @@ describe('Reports HTTP endpoints', () => {
   });
 
   beforeEach(() => {
-    findMany
-      .mockReset()
-      .mockResolvedValue([
-        ...matchingTasks,
-        {
-          ...task,
-          id: 'no-evaluation',
-          requiredCompletionDate: null,
-          approvedStatus: null,
-        },
-        { ...task, id: 'cancelled', isCancelled: true },
-        { ...task, id: 'late', approvedStatus: 'COMPLETED_LATE' },
-      ]);
-    findDepartment.mockClear();
+    findMany.mockReset().mockResolvedValue([
+      ...matchingTasks,
+      {
+        ...task,
+        id: 'no-evaluation',
+        requiredCompletionDate: null,
+        approvedStatus: null,
+      },
+      { ...task, id: 'cancelled', isCancelled: true },
+      { ...task, id: 'late', approvedStatus: 'COMPLETED_LATE' },
+    ]);
+    findDepartment.mockReset().mockResolvedValue({ name: 'Phòng Kỹ thuật' });
   });
 
   afterAll(async () => {
@@ -201,24 +219,12 @@ describe('Reports HTTP endpoints', () => {
       onTimeRate: 100,
     });
 
-    const exported = await request(app.getHttpServer())
-      .get('/reports/tasks/export')
-      .query(filters)
-      .buffer(true)
-      .parse((response, callback) => {
-        const chunks: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => chunks.push(chunk));
-        response.on('end', () => callback(null, Buffer.concat(chunks)));
-        response.on('error', (error: Error) => callback(error, null));
-      })
-      .expect(200)
-      .expect('Content-Type', /spreadsheetml/);
+    const sheet = await readExport(
+      request(app.getHttpServer()).get('/reports/tasks/export').query(filters),
+    );
     expect(findMany.mock.calls[1][0].where).toEqual(
       findMany.mock.calls[0][0].where,
     );
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(exported.body);
-    const sheet = workbook.worksheets[0];
     const evidenceColumnWidth = sheet.getColumn('I').width;
     const otherColumnWidths = sheet.columns
       .filter((column) => column.number !== 9)
@@ -321,15 +327,122 @@ describe('Reports HTTP endpoints', () => {
     });
   });
 
-  it('keeps both endpoints restricted to admins', async () => {
-    await request(app.getHttpServer())
+  function useTwoDepartments() {
+    const rows = [
+      { ...task, id: 'own', title: 'Nhiệm vụ nội bộ' },
+      {
+        ...task,
+        id: 'foreign',
+        title: 'Nhiệm vụ của đơn vị khác',
+        ownerDepartmentId: 'dept-2',
+        ownerDepartment: { name: 'Phòng Kế hoạch' },
+        coordinatingUnits: 'Phòng Kỹ thuật',
+      },
+    ];
+    findMany.mockImplementation(async ({ where }) =>
+      rows.filter(
+        (row) =>
+          !where.ownerDepartmentId ||
+          row.ownerDepartmentId === where.ownerDepartmentId,
+      ),
+    );
+    findDepartment.mockImplementation(async ({ where }) => ({
+      name: where.id === 'dept-2' ? 'Phòng Kế hoạch' : 'Phòng Kỹ thuật',
+    }));
+  }
+
+  it.each(['ADMIN', 'SECRETARY'])(
+    'lets %s report across departments',
+    async (role) => {
+      useTwoDepartments();
+      const headers = { 'x-test-role': role, 'x-test-department': 'dept-1' };
+      const preview = await request(app.getHttpServer())
+        .get('/reports/tasks')
+        .set(headers)
+        .expect(200);
+      expect(preview.body.tasks.map((row) => row.id)).toEqual([
+        'own',
+        'foreign',
+      ]);
+      expect(preview.body.scope.department).toBe('Toàn cơ quan');
+
+      const sheet = await readExport(
+        request(app.getHttpServer()).get('/reports/tasks/export').set(headers),
+      );
+      expect(sheet.getCell('A8').value).toBe(2);
+      expect(sheet.getCell('D12').value).toBe('Phòng Kế hoạch');
+
+      const filtered = await request(app.getHttpServer())
+        .get('/reports/tasks')
+        .set(headers)
+        .query({ departmentId: 'dept-2' })
+        .expect(200);
+      expect(filtered.body.tasks.map((row) => row.id)).toEqual(['foreign']);
+      expect(filtered.body.scope.department).toBe('Phòng Kế hoạch');
+    },
+  );
+
+  it('uses the authenticated department for both preview and Excel', async () => {
+    useTwoDepartments();
+    const headers = {
+      'x-test-role': 'DEPARTMENT_EDITOR',
+      'x-test-department': 'dept-1',
+    };
+    const preview = await request(app.getHttpServer())
       .get('/reports/tasks')
-      .set('x-test-role', 'VIEWER')
-      .expect(403);
-    await request(app.getHttpServer())
-      .get('/reports/tasks/export')
-      .set('x-test-role', 'VIEWER')
-      .expect(403);
-    expect(findMany).not.toHaveBeenCalled();
+      .query({ dateFilterType: 'ALL' })
+      .set(headers)
+      .expect(200);
+    expect(preview.body.tasks.map((row) => row.id)).toEqual(['own']);
+    expect(preview.body.summary.total).toBe(1);
+    expect(preview.body.scope.department).toBe('Phòng Kỹ thuật');
+
+    const sheet = await readExport(
+      request(app.getHttpServer())
+        .get('/reports/tasks/export')
+        .query({ departmentId: 'dept-1' })
+        .set(headers),
+    );
+    expect(sheet.getCell('A8').value).toBe(1);
+    expect(sheet.getCell('D11').value).toBe('Phòng Kỹ thuật');
+    expect(sheet.getCell('D12').value).toBeNull();
+    expect(
+      findMany.mock.calls.map(([query]) => query.where.ownerDepartmentId),
+    ).toEqual(['dept-1', 'dept-1']);
   });
+
+  it.each(['/reports/tasks', '/reports/tasks/export'])(
+    'rejects a foreign department or an unassigned editor at %s',
+    async (endpoint) => {
+      await request(app.getHttpServer())
+        .get(endpoint)
+        .set({
+          'x-test-role': 'DEPARTMENT_EDITOR',
+          'x-test-department': 'dept-1',
+        })
+        .query({ departmentId: 'dept-2' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .get(endpoint)
+        .set('x-test-role', 'DEPARTMENT_EDITOR')
+        .query({ departmentId: 'dept-1' })
+        .expect(403);
+      expect(findMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['VIEWER', 'LEADER'])(
+    'rejects report access for %s',
+    async (role) => {
+      await request(app.getHttpServer())
+        .get('/reports/tasks')
+        .set('x-test-role', role)
+        .expect(403);
+      await request(app.getHttpServer())
+        .get('/reports/tasks/export')
+        .set('x-test-role', role)
+        .expect(403);
+      expect(findMany).not.toHaveBeenCalled();
+    },
+  );
 });
