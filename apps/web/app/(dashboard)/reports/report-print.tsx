@@ -43,15 +43,15 @@ export function ReportPrint({ report, author }: { report: ReportData; author: st
         <table>
           <thead>
             <tr>
-              <th scope="col" className="w-[4%]">STT</th>
-              <th scope="col" className="w-[9%]">Số văn bản</th>
-              <th scope="col" className="w-[25%]">Nội dung nhiệm vụ</th>
-              <th scope="col" className="w-[11%]">Đơn vị chủ trì</th>
-              <th scope="col" className="w-[9%]">Đơn vị phối hợp</th>
-              <th scope="col" className="w-[8%]">Hạn hoàn thành</th>
-              <th scope="col" className="w-[8%]">Ngày hoàn thành</th>
-              <th scope="col" className="w-[10%]">Trạng thái</th>
-              <th scope="col">Tiến độ / Bằng chứng</th>
+              <th scope="col" className="w-[3%]">STT</th>
+              <th scope="col" className="w-[6%]">Số văn bản</th>
+              <th scope="col" className="w-[20%]">Nội dung nhiệm vụ</th>
+              <th scope="col" className="w-[8%]">Đơn vị chủ trì</th>
+              <th scope="col" className="w-[7%]">Đơn vị phối hợp</th>
+              <th scope="col" className="w-[7%]">Hạn hoàn thành</th>
+              <th scope="col" className="w-[7%]">Ngày hoàn thành</th>
+              <th scope="col" className="w-[8%]">Trạng thái</th>
+              <th scope="col" className="w-[26%]">Tiến độ / Bằng chứng</th>
               <th scope="col" className="w-[8%]">Ý kiến chỉ đạo</th>
             </tr>
           </thead>
@@ -66,8 +66,8 @@ export function ReportPrint({ report, author }: { report: ReportData; author: st
                 </td>
                 <td>{task.ownerDepartmentName}</td>
                 <td>{task.coordinatingUnits || "—"}</td>
-                <td className="text-center">{formatReportDate(task.requiredCompletionDate)}</td>
-                <td className="text-center">{formatReportDate(task.actualCompletionDate)}</td>
+                <td className="text-center whitespace-nowrap">{formatReportDate(task.requiredCompletionDate)}</td>
+                <td className="text-center whitespace-nowrap">{formatReportDate(task.actualCompletionDate)}</td>
                 <td>{task.statusLabel}</td>
                 <td className="whitespace-pre-wrap">{[task.completionEvidence, task.incompleteReason].filter(Boolean).join("\n") || "—"}</td>
                 <td className="whitespace-pre-wrap">{task.directives.join("\n") || "—"}</td>

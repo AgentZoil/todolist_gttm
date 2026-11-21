@@ -552,15 +552,15 @@ export class ReportsService {
 
     // Column Widths — dùng getColumn() để tránh ExcelJS reset rows khi set sheet.columns sau
     sheet.getColumn(1).width = 6; // STT
-    sheet.getColumn(2).width = 16; // Số VB
-    sheet.getColumn(3).width = 40; // Nội dung
-    sheet.getColumn(4).width = 22; // Đơn vị chủ trì
-    sheet.getColumn(5).width = 20; // Phối hợp
-    sheet.getColumn(6).width = 14; // Hạn HT
-    sheet.getColumn(7).width = 14; // Thực tế HT
-    sheet.getColumn(8).width = 18; // Trạng thái
-    sheet.getColumn(9).width = 28; // Tiến độ/Bằng chứng
-    sheet.getColumn(10).width = 25; // Ý kiến chỉ đạo
+    sheet.getColumn(2).width = 13; // Số VB
+    sheet.getColumn(3).width = 37; // Nội dung
+    sheet.getColumn(4).width = 19; // Đơn vị chủ trì
+    sheet.getColumn(5).width = 16; // Phối hợp
+    sheet.getColumn(6).width = 12; // Hạn HT
+    sheet.getColumn(7).width = 12; // Thực tế HT
+    sheet.getColumn(8).width = 16; // Trạng thái
+    sheet.getColumn(9).width = 51; // Tiến độ/Bằng chứng
+    sheet.getColumn(10).width = 21; // Ý kiến chỉ đạo
 
     // Signatures
     const finalRowIdx = tableHeaderRowIndex + tasks.length + 3;

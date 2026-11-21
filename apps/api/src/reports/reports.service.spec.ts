@@ -219,6 +219,12 @@ describe('Reports HTTP endpoints', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(exported.body);
     const sheet = workbook.worksheets[0];
+    const evidenceColumnWidth = sheet.getColumn('I').width;
+    const otherColumnWidths = sheet.columns
+      .filter((column) => column.number !== 9)
+      .map((column) => column.width);
+    expect(evidenceColumnWidth).toBeGreaterThan(Math.max(...otherColumnWidths));
+    expect(sheet.getCell('I11').alignment.wrapText).toBe(true);
     expect(sheet.getCell('A5').value).toContain(
       'Phòng Kỹ thuật · Trạng thái: Hoàn thành đúng hạn',
     );
